@@ -1,0 +1,5 @@
+numpy
+opencv-python
+ffmpeg-python
+loguru
+matplotlib

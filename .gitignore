@@ -1,2 +1,12 @@
 # Data folder
-rti/data
+data
+
+# Notebooks
+*.ipynb
+
+# Egg files
+*.egg
+*.egg-info
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
