@@ -1,15 +1,17 @@
+import os
 import numpy as np
 from typing import List, Tuple
+import ffmpeg
 import matplotlib.pyplot as plt
 from scipy.signal import correlate
 
 from src.model import VideoFile, AudioFile
 from src.utils.io_ import FormatLogger, SilentLogger, InputSanitization as IS, IOOperations as IO, PathOperations as PO
 
-
 class VideoSync:
 
     AUDIO_EXT = 'wav'
+    VIDEO_EXT = 'mp4'
 
     def __init__(
         self, 
@@ -70,10 +72,18 @@ class VideoSync:
                 audio2=audio2,
                 offset=off,
                 title=f'{self._exp_name} {title} Audio Signals',
-                save_path=os.path.join(self.out_dir, f'{title}.png'),
+                save_path=os.path.join(self.out_dir, f'audio-sync_{title.lower()}.png'),
                 logger=self._logger
             )
         
+        # Save trimmed audios
+        self.trim_audio(
+            video1=self._video1,
+            video2=self._video2,
+            sync_time=offset,
+            out_path=self.out_dir,
+            logger=self._logger
+        )
 
 
     def _extract_audio(self) -> Tuple[AudioFile, AudioFile]:
@@ -101,6 +111,45 @@ class VideoSync:
 
         audio1, audio2 = audios
         return audio1, audio2
+    
+    @staticmethod
+    def trim_audio(
+        video1    : VideoFile, 
+        video2    : VideoFile,
+        sync_time : float,
+        out_path  : str, 
+        logger    : FormatLogger = SilentLogger()
+    ):
+
+        # Use longest video as `video1`
+        if video1.metadata.duration < video2.metadata.duration:
+            video1, video2 = video2, video1
+
+        # Get frame rates
+        fps = min(video1.metadata.frame_rate, video2.metadata.frame_rate)
+
+        # Calculate trimmed duration
+        aligned_duration = min(
+            video1.metadata.duration - sync_time, 
+            video2.metadata.duration
+        )
+
+        for video, sync in zip([video1, video2], [sync_time, 0]):
+
+            camera_name = PO.get_containing_folder(video.path)
+            out_video_path = os.path.join(out_path, f'{camera_name}.{VideoSync.VIDEO_EXT}')
+
+            cmd = (
+                ffmpeg
+                .input(video.path, ss=sync) 
+                .filter('fps', fps=fps)   
+                .output(out_video_path, t=aligned_duration, vcodec='libx264', acodec='aac', format='mp4')
+            )
+
+            logger.info(f'Convering video at {video.path} to {out_video_path} for synchronization')
+
+            cmd.run(overwrite_output=True)
+
 
     @staticmethod
     def calculate_sync_offset(
@@ -119,7 +168,7 @@ class VideoSync:
         # Compute offset in seconds
         offset_time = lag / audio1.rate
 
-        return float(offset_time)
+        return abs(float(offset_time))
 
     @staticmethod
     def plot_aligned_audio(

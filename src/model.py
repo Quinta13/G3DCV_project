@@ -78,13 +78,13 @@ class VideoFile:
             return f"Metadata[ext: {self.ext}, "\
                 f"{self.frames     } frames, "\
                 f"{self.duration   } seconds, "\
-                f"{self.frame_rate } fps, "\
-                f"{self.sample_rate} Hz]"
+                f"{self.frame_rate } fps, " +\
+                (f"{self.sample_rate} Hz" if self.has_audio else "No audio") + "]"
         
         def __repr__(self) -> str: return str(self)
         
         @property
-        def has_audio(self) -> bool: return self.sample_rate is not None
+        def has_audio(self) -> bool: return self._sample_rate is not None
         
         @property
         def sample_rate(self) -> int:
