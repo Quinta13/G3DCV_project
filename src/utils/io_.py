@@ -13,7 +13,6 @@ from scipy.io.wavfile import read as wav_read
 
 from src.utils.misc import Timer
 
-
 # _______________________________ LOGGER _______________________________
 
 class BaseLogger(logging.Logger):
@@ -43,9 +42,9 @@ class BaseLogger(logging.Logger):
     # --- LOGGING CHANNELS ---
 
     ''' The pubic methods are predefined with the formatter function. '''
-    def info   (self, msg): self._info   (self.formatter(msg))
-    def warning(self, msg): self._warning(self.formatter(msg))
-    def error  (self, msg): self._error  (self.formatter(msg))
+    def info   (self, msg): [self._info   (self.formatter(msg_)) for msg_ in msg.split("\n")]
+    def warning(self, msg): [self._warning(self.formatter(msg_)) for msg_ in msg.split("\n")]
+    def error  (self, msg): [self._error  (self.formatter(msg_)) for msg_ in msg.split("\n")]
 
     ''' The private methods are abstract and must be implemented by the subclasses. '''
     @abstractmethod
@@ -101,7 +100,7 @@ class FileLogger(BaseLogger):
     def _error  (self, msg): self._logger.error  (msg)
 
 
-# --- CONTAINER UTILS CLASSES ---
+# _______________________________ CONTAINER UTILS CLASSES _______________________________
 
 class PathUtils:
 
@@ -144,9 +143,9 @@ class IOUtils:
 
         if not os.path.exists(path): 
             os.makedirs(path)
-            logger.info(f"Directory created at: {path}")
+            logger.info(msg=f"Directory created at: {path}")
         else:
-            logger.info(f"Directory already found at: {path}")
+            logger.info(msg=f"Directory already found at: {path}")
     
     @staticmethod
     def error_handler(msg: str, logger: BaseLogger, exception: Type[Exception] = ValueError):
@@ -168,7 +167,7 @@ class InputSanitizationUtils:
                 exception=FileNotFoundError
             )
         else:
-            logger.info(f"Input file found at: {path} ")
+            logger.info(msg=f"Input file found at: {path} ")
 
     @staticmethod
     def check_output(path: str, logger: BaseLogger = SilentLogger()):
@@ -182,7 +181,7 @@ class InputSanitizationUtils:
                 exception=FileNotFoundError
             )
         else:                           
-            logger.info(f"Output directory found at: {out_dir} ")
+            logger.info(msg=f"Output directory found at: {out_dir} ")
 
     @staticmethod
     def check_extension(path: str, ext: str | Set[str], logger: BaseLogger = SilentLogger()):
@@ -190,7 +189,7 @@ class InputSanitizationUtils:
 
         if type(ext) == str: ext = {ext}
 
-        if not any([path.endswith(e) for e in ext]):
+        if not any([path.endswith(e) for e in f'.{ext}']):
 
             logger.handle_error(
                 msg=f"Invalid file extension: {path}. Expected one of {ext} extensions.", 
@@ -204,7 +203,7 @@ class InputSanitizationUtils:
 class AudioFile:
     ''' Class to handle audio files. '''
 
-    EXT_AUDIO = {'.wav'}
+    EXT_AUDIO = {'wav', 'mp3', 'flac', 'ogg', 'm4a', 'wma', 'aac', 'aiff', 'au', 'raw'}
 
     # --- INITIALIZATION ---
 
@@ -226,13 +225,13 @@ class AudioFile:
         InputSanitizationUtils.check_input    (path=self.path, logger=self._logger_verbose)
         InputSanitizationUtils.check_extension(path=self.path, logger=self._logger_verbose, ext=self.EXT_AUDIO)
 
-        self._logger.info(f"Reading audio file from {self.path} ...")
+        self._logger.info(msg=f"Reading audio file from {self.path} ...")
 
         timer = Timer()
 
         try: 
             rate, data = wav_read(filename=self.path)
-            self._logger.info(f"Audio read successfully in {timer}.")
+            self._logger.info(msg=f"Audio read successfully in {timer}.")
         except Exception as e:
             self._logger.error(f"Failed to extract audio: {e}")
             raise e
@@ -280,21 +279,74 @@ class VideoFile:
     ''' Class to handle video files. '''
 
     @dataclass
-    class Metadata:
+    class VideoMetadata:
         ''' Dataclass to store video metadata. '''
 
-        ext          : str        # File extension  
-        frames       : int        # Number of video frames
-        duration     : float      # Video duration in seconds
-        frame_rate   : float      # Video frame rate in frames per second
-        _sample_rate : int | None # Audio sample rate, if audio stream is present
+        ext          : str             # File extension  
+        frames       : int             # Number of video frames
+        duration     : float           # Video duration in seconds
+        fps          : float           # Video frame rate in frames per second
+        size         : Tuple[int, int] # Video frame size
+        _sample_rate : int | None      # Audio sample rate, if audio stream is present
+
+        @classmethod
+        def from_dict(cls, data: Dict) -> 'VideoFile.VideoMetadata':
+            ''' Create video metadata from a dictionary. '''
+
+            try:
+                return cls(
+                    ext          = data['ext'],
+                    frames       = data['num_frames'],
+                    duration     = data['duration'],
+                    fps          = data['frame_rate'],
+                    size         = data['size'],
+                    _sample_rate = data['sample_rate']
+                )
+
+            except KeyError as e:
+                raise ValueError(f"Invalid dictionary for video metadata: {e}")
+
+        @classmethod
+        def from_video_path(cls, path: str, logger: BaseLogger, verbose: bool = False) -> 'VideoFile.VideoMetadata':
+            ''' Load video metadata from a video file path. '''
+            
+            logger_verbose = logger if verbose else SilentLogger()
+            
+            InputSanitizationUtils.check_input    (path=path, logger=logger_verbose)
+            InputSanitizationUtils.check_extension(path=path, logger=logger_verbose, ext=VideoFile.VIDEO_EXT)
+
+            logger.info(msg=f"Loading metadata from video {path}")
+
+            probe = ffmpeg.probe(path)
+
+            # Video stream
+            video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
+            if not video_stream: logger.handle_error(msg=f"No video stream found in video {path}", exception=ValueError)
+
+            # Audio stream
+            audio_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
+            if not audio_stream: logger.warning(msg=f"No audio stream found in video {path}")
+
+            # Metadata
+            return cls(
+                ext          = PathUtils.get_file_ext(path),
+                frames       = int  (video_stream.get('nb_frames',      0)),
+                duration     = float(video_stream.get('duration',       0)),
+                fps          = eval (video_stream.get('avg_frame_rate', 0)),
+                _sample_rate = int  (audio_stream.get('sample_rate',    0)) if audio_stream else None,
+                size         = (
+                    int(video_stream.get('width',  0)), 
+                    int(video_stream.get('height', 0))
+                ),
+            )
 
         def __str__(self) -> str:
 
             return f"Metadata[ext: {self.ext}; "\
                 f"{self.frames     } frames; "\
                 f"{self.duration   } seconds; "\
-                f"{self.frame_rate } fps; " +\
+                f"{self.fps } fps; "\
+                f"{self.size       } size; " +\
                 (f"{self.sample_rate} Hz" if self.has_audio else "No audio") + "]"
 
         def __repr__(self) -> str: return str(self)
@@ -313,12 +365,13 @@ class VideoFile:
                 'ext'         : self.ext,
                 'num_frames'  : self.frames,
                 'duration'    : self.duration,
-                'frame_rate'  : self.frame_rate,
-                'sample_rate' : self.sample_rate
+                'frame_rate'  : self.fps,
+                'size'        : self.size,
+                'sample_rate' : self.sample_rate,
             }
 
-    VIDEO_EXT = {'.mov', '.mp4', '.avi'}
-    AUDIO_EXTRACTION_EXT = '.wav'
+    VIDEO_EXT = {'mp4', 'avi', 'mov', 'mkv', 'flv', 'webm', 'wmv', 'mpg', 'ogv'}
+    AUDIO_EXTRACTION_EXT = 'wav'
 
     # --- INITIALIZATION ---
 
@@ -330,41 +383,22 @@ class VideoFile:
 
         self._path: str = path
 
-        self._metadata: VideoFile.Metadata = self._load_metadata()
-
-    def _load_metadata(self) -> Metadata:
-
-        InputSanitizationUtils.check_input    (path=self.path, logger=self._logger_verbose)
-        InputSanitizationUtils.check_extension(path=self.path, logger=self._logger_verbose, ext=VideoFile.VIDEO_EXT)
-
-        self._logger.info(f"Loading metadata from video {self.path}")
-
-        probe = ffmpeg.probe(self.path)
-
-        # Video stream
-        video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-        if not video_stream: self._logger.handle_error(msg=f"No video stream found in video {self.path}", exception=ValueError)
-
-        # Audio stream
-        audio_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
-        if not audio_stream: self._logger.warning(f"No audio stream found in video {self.path}")
-
-        # Metadata
-        return VideoFile.Metadata(
-            ext          = PathUtils.get_file_ext(self.path),
-            frames       = int  (video_stream.get('nb_frames',      0)),
-            duration     = float(video_stream.get('duration',       0)),
-            frame_rate   = eval (video_stream.get('avg_frame_rate', 0)),
-            _sample_rate = int  (audio_stream.get('sample_rate',    0)) if audio_stream else None,
+        self._metadata: VideoFile.VideoMetadata = VideoFile.VideoMetadata.from_video_path(
+            path=self.path,
+            logger=self._logger, 
+            verbose=self._logger==self._logger_verbose
         )
     
     # --- MAGIC METHODS ---
 
     def __str__(self) -> str:
+
+        w, h = self.metadata.size
         
         return f"Video[{self.name}; "\
             f"duration: {int  (self.metadata.duration     )} sec; "\
-            f"frame rate: {round(self.metadata.frame_rate, 2)} fps]"
+            f"size: {w}x{h} pixels; "\
+            f"frame rate: {round(self.metadata.fps, 2)} fps]"
 
     def __repr__(self) -> str: return str(self)
 
@@ -380,7 +414,7 @@ class VideoFile:
     def path(self) -> str: return self._path
 
     @property
-    def metadata(self) -> Metadata: return self._metadata
+    def metadata(self) -> VideoMetadata: return self._metadata
 
     @property
     def has_audio(self) -> bool: return self.metadata.has_audio
@@ -408,7 +442,7 @@ class VideoFile:
             self._logger.handle_error(f"Cannot extract audio stream in video {self.path}", exception=ValueError)
 
         audio = self.extract_audio(video=self, out_path=self.audio_path, logger=self._logger, verbose=self._logger==self._logger_verbose)
-        self._logger.info('Use method `close_audio` to remove the audio file from the file system.')
+        self._logger.info(msg='Use method `close_audio` to remove the audio file from the file system.')
         return audio
 
     @staticmethod
@@ -428,7 +462,7 @@ class VideoFile:
 
         InputSanitizationUtils.check_output(path=out_path, logger=verbose_logger)
 
-        logger.info(f"Extracting audio from {video.path} to {out_path} ...")
+        logger.info(msg=f"Extracting audio from {video.path} to {out_path} ...")
 
         try:
 
@@ -446,7 +480,7 @@ class VideoFile:
             
             cmd.run(overwrite_output=True, quiet=True)
 
-            logger.info(f"Audio extracted successfully in {timer}.")
+            logger.info(msg=f"Audio extracted successfully in {timer}.")
             return AudioFile(path=out_path, logger=logger)
 
         except Exception as e:
@@ -461,10 +495,10 @@ class VideoFile:
         try:
 
             if os.path.exists(self.audio_path):
-                self._logger.info(f"Removing audio file {self.audio_path}")
+                self._logger.info(msg=f"Removing audio file {self.audio_path}")
                 os.remove(self.audio_path)
             else:
-                self._logger.warning(f"Cannot remove audio file at: {self.audio_path}, not found")
+                self._logger.warning(msg=f"Cannot remove audio file at: {self.audio_path}, not found")
 
         except Exception as e:
             self._logger.error(f"Failed to remove audio file: {e}")
