@@ -9,12 +9,14 @@ from scipy.signal import correlate
 import ffmpeg
 import cv2 as cv
 
-from src.model import CameraCalibration, VideoStream
+
+from src.model.calibration import CameraCalibration
+from src.model.stream import VideoStream
 from src.utils.io_ import (
     BaseLogger, SilentLogger, 
     PathUtils, AudioFile, VideoFile
 )
-from src.utils.misc import Timer
+from src.utils.misc import Timer, Size
 
 
 class VideoSync:
@@ -51,6 +53,7 @@ class VideoSync:
 
         self._logger        : BaseLogger = logger
         self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
+        self._is_verbose    : bool       = verbose
         self._out_dir       : str        = out_dir
 
     # --- MAGIC METHODS ---
@@ -76,8 +79,7 @@ class VideoSync:
 
     # --- SYNC METHODS ---
 
-    
-    def sync(self):
+    def sync(self) -> Tuple[VideoStream, VideoStream]:
 
         timer = Timer()
 
@@ -143,6 +145,11 @@ class VideoSync:
             self._logger.info(msg=f"Trimmed videos have the same number of frames: {video1_out.metadata.frames}.")
 
         self._logger.info(msg=f"")
+
+        return (
+            VideoStream(path=video1_out.path),
+            VideoStream(path=video2_out.path),
+        )
 
     def _extract_audio(self) -> Tuple[AudioFile, AudioFile]:
         ''' Extract audio from the two videos with the same sample rate. '''
@@ -329,7 +336,7 @@ class ChessboardCameraCalibrator(VideoStream):
     def __init__(
             self, 
             path            : str, 
-            chessboard_size : Tuple[int, int],
+            chessboard_size : Size,
             samples         : int,
             logger          : BaseLogger = SilentLogger(), 
             verbose         : bool       = False
@@ -340,8 +347,8 @@ class ChessboardCameraCalibrator(VideoStream):
 
         super().__init__(path=path, logger=logger, verbose=verbose)
 
-        self._chessboard_size: Tuple[int, int] = chessboard_size
-        self._samples:         int             = samples
+        self._chessboard_size: Size = chessboard_size
+        self._samples:         int  = samples
 
         self._reset_img_points()
 
@@ -364,7 +371,7 @@ class ChessboardCameraCalibrator(VideoStream):
         return obj_point
     
     @property
-    def chessboard_size(self) -> Tuple[int, int]: return self._chessboard_size
+    def chessboard_size(self) -> Size: return self._chessboard_size
 
     @property
     def samples(self) -> int: return self._samples
@@ -382,9 +389,8 @@ class ChessboardCameraCalibrator(VideoStream):
             f"samples={self.samples}; "\
             f"skip frames={self.skip_frames}) "\
     
-    def calibrate(self, window_size: Tuple[int, int] | None = None) -> CameraCalibration:
+    def calibrate(self, window_size: Size | None = None) -> CameraCalibration:
         ''' Calibrate the camera using the collected image points. '''
-
 
         self._reset_img_points()
 

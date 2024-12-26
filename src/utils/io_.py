@@ -212,6 +212,7 @@ class AudioFile:
 
         self._logger        : BaseLogger = logger
         self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
+        self._is_verbose    : bool = verbose
 
         self._path: str = path
 
@@ -380,13 +381,14 @@ class VideoFile:
 
         self._logger        : BaseLogger = logger
         self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
+        self._is_verbose    : bool = verbose
 
         self._path: str = path
 
         self._metadata: VideoFile.VideoMetadata = VideoFile.VideoMetadata.from_video_path(
             path=self.path,
             logger=self._logger, 
-            verbose=self._logger==self._logger_verbose
+            verbose=self._is_verbose
         )
     
     # --- MAGIC METHODS ---
@@ -441,7 +443,7 @@ class VideoFile:
         if not self.has_audio:
             self._logger.handle_error(f"Cannot extract audio stream in video {self.path}", exception=ValueError)
 
-        audio = self.extract_audio(video=self, out_path=self.audio_path, logger=self._logger, verbose=self._logger==self._logger_verbose)
+        audio = self.extract_audio(video=self, out_path=self.audio_path, logger=self._logger, verbose=self._is_verbose)
         self._logger.info(msg='Use method `close_audio` to remove the audio file from the file system.')
         return audio
 
