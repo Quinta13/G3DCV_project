@@ -148,7 +148,7 @@ class VideoStream:
         single_sync_stream = SynchronizedVideoStream(streams=[self], logger=self._logger, verbose=self._is_verbose)
         single_sync_stream.play(start=start, end=end, skip_frames=skip_frames, window_size=window_size, exclude_views={self.name: exclude_views})
     
-    def _process_frame(self, frame: Frame, frame_id: int) -> Dict[str]:
+    def _process_frame(self, frame: Frame, frame_id: int) -> Views:
         """
         Process a frame before displaying it.
         NOTE: This method can be overridden by subclasses to apply custom processing.

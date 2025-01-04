@@ -4,7 +4,7 @@ from cv2.typing import Size
 
 from src.model.calibration import CalibratedVideoStream, CameraCalibration
 from src.utils.io_ import SilentLogger
-from src.model.typing import Frame
+from src.model.typing import Frame, Views
 from src.utils.io_ import BaseLogger
 
 class ThresholdedVideoStream(CalibratedVideoStream):

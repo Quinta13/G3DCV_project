@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 from src.utils.misc import Timer, default
 from src.utils.io_ import SilentLogger
 from src.utils.io_ import BaseLogger
+from src.model.typing import Views
 
 
 @dataclass

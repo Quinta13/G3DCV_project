@@ -24,8 +24,8 @@ from src.utils.io_ import BaseLogger
 
 class VideoSync:
 
-    AUDIO_EXT     = 'wav'
-    VIDEO_EXT     = 'mp4'
+    AUDIO_EXT = 'wav'
+    VIDEO_EXT = 'mp4'
 
     def __init__(
         self, 

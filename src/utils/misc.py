@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import math
 import time
 from typing import List, Tuple, TypeVar
@@ -42,15 +43,17 @@ class Timer:
 
 # _______________________________ COLOR _______________________________
 
-def generate_palette(n: int) -> List[RGBColor]:
+def generate_palette(n: int, palette_type: str = "hsv") -> List[RGBColor]:
     
-    if n <= 0: raise ValueError(f"The number of colors must be positive, got {n}. ")
-
-    # Generate evenly spaced points in HSV space
-    hues    = np.linspace(0, 1, n, endpoint=False)  # Evenly spaced hues
-    palette = [tuple(int(c * 255) for c in plt.cm.hsv(hue)[:3]) for hue in hues]  # type: ignore - hsv in plt.cm is a valid color map
-
-    return palette  # type: ignore - by construction the tuples have 3 elements
+    if palette_type in plt.colormaps():
+        # Usa le colormap predefinite di Matplotlib
+        colormap = plt.cm.get_cmap(palette_type)
+        return  [tuple(int(c * 255) for c in colormap(i / n)[:3]) for i in range(n)]  # type: ignore
+    
+    raise ValueError(
+        f"Invalid palette_type '{palette_type}'. " 
+        f"Available options are: {', '.join(plt.colormaps()[:10])} ... "
+    )
 
 
 # _______________________________ PLOTTING _______________________________
