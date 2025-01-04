@@ -3,8 +3,9 @@ from dotenv import load_dotenv
 
 from src.preprocessing import VideoSync
 from src.model.stream import SynchronizedVideoStream
-from src.utils.io_ import FileLogger, VideoFile, IOUtils
+from src.utils.io_ import VideoFile, IOUtils
 from src.utils.misc import Timer
+from src.utils.io_ import FileLogger
 
 load_dotenv()
 

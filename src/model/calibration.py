@@ -2,13 +2,18 @@ import pickle
 import cv2 as cv
 from dataclasses import dataclass
 from typing import Any, Dict, List
+
+import numpy as np
+from src.model.typing import Frame, Size2D
 from src.model.stream import VideoStream
-from src.utils.io_ import BaseLogger, InputSanitizationUtils as ISUtils, PathUtils, SilentLogger
+from src.utils.io_ import InputSanitizationUtils as ISUtils, PathUtils
 
 
 from numpy.typing import NDArray
 
-from src.utils.misc import Size, Timer, default
+from src.utils.misc import Timer, default
+from src.utils.io_ import SilentLogger
+from src.utils.io_ import BaseLogger
 
 
 @dataclass
@@ -18,13 +23,14 @@ class CameraCalibration:
     camera_mat       : NDArray        # 3x3 Intrinsic Camera Matrix
     distortion_coeffs: NDArray        # 1x5 Distortion Coefficients
     params           : Dict[str, Any] # Camera Calibration Hyperparameters
+    white_mask       : bool = False   # Whether to fill empty pixels with white
 
     @classmethod
     def from_points(
         cls,
         obj_points: List[NDArray],
         img_points: List[NDArray],
-        size      : Size,
+        size      : Size2D,
         params    : Dict[str, Any] | None = None,
         logger    : BaseLogger            = SilentLogger()
     ) -> 'CameraCalibration':
@@ -44,7 +50,7 @@ class CameraCalibration:
 
         # Calibrate the camera
         ret, camera_mat, distortion_coeffs, _, _ = cv.calibrateCamera( # type: ignore
-            obj_points, img_points, size, None, None                         # type: ignore
+            obj_points, img_points, size, None, None                   # type: ignore
         )
 
         if not ret: logger.handle_error(msg="Camera calibration failed. ", exception=RuntimeError)
@@ -57,6 +63,18 @@ class CameraCalibration:
             distortion_coeffs=distortion_coeffs,
             params=params_ | {"reprojection_error": ret},
         )
+    
+    @classmethod
+    def trivial_calibration(cls) -> 'CameraCalibration':
+        ''' Create a trivial camera calibration with no distortion. '''
+
+        return cls(
+            camera_mat=np.eye(3),
+            distortion_coeffs=np.zeros((1, 5)),
+            params={"reprojection_error": None}
+        )
+
+        
 
     @classmethod
     def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'CameraCalibration':
@@ -85,10 +103,27 @@ class CameraCalibration:
 
     def __repr__(self) -> str: return str(self)
 
-    def undistort(self, img: NDArray) -> NDArray:
+    def undistort(self, img: Frame) -> Frame:
         ''' Undistort an image using the camera calibration coefficients. '''
 
-        return cv.undistort(img, self.camera_mat, self.distortion_coeffs)
+        # Perform undistortion
+        undistorted = cv.undistort(img, self.camera_mat, self.distortion_coeffs)
+
+        # White mask
+        if self.white_mask:
+
+            # Create a white probe image
+            probe_img = np.full_like(img, 255)
+            probe_img_undistorted = cv.undistort(probe_img, self.camera_mat, self.distortion_coeffs)
+
+            # Create a mask for empty pixels
+            if len(probe_img.shape) == 3: mask = (probe_img_undistorted == 0).all(axis=2)  # For color images
+            else:                         mask = (probe_img_undistorted == 0)              # For grayscale images
+
+            # Fill empty pixels with white
+            undistorted[mask] = 255
+
+        return undistorted
 
     def dump(
         self,
@@ -110,17 +145,27 @@ class CameraCalibration:
 
 class CalibratedVideoStream(VideoStream):
 
-    def __init__(self, path: str, calibration: CameraCalibration, name: str = '', logger: BaseLogger = SilentLogger(), verbose: bool = False):
+    def __init__(
+        self, 
+        path        : str, 
+        calibration : CameraCalibration, 
+        name        : str        = '',
+        logger      : BaseLogger = SilentLogger(), 
+        verbose     : bool       = False,
+    ):
 
         super().__init__(path=path, name=name, logger=logger, verbose=verbose)
+
         self._calibration: CameraCalibration = calibration
 
     @property
     def _str_name(self) -> str: return 'CalibratedVideoStream'
 
-    def _process_frame(self, frame: NDArray, frame_id: int) -> NDArray:
+    def _process_frame(self, frame: Frame, frame_id: int) -> Views:
+
+        frame_dict = super()._process_frame(frame=frame, frame_id=frame_id)
 
         # Undistort the frame
-        frame_ =  self._calibration.undistort(frame)
+        frame_calibrated = self._calibration.undistort(frame_dict['raw'].copy())
 
-        return super()._process_frame(frame=frame_, frame_id=frame_id)
+        return {'calibrated': frame_calibrated} | frame_dict

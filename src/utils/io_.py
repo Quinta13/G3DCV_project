@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-import os
-import logging
 from abc import abstractmethod
+import logging
+import os
 from dataclasses import dataclass
-from typing import Dict, Set, Callable, Tuple, Type
+from typing import Callable, Dict, Set, Tuple, Type
 
 import ffmpeg
-from numpy.typing import NDArray
 from loguru import logger as loguru_logger
+from numpy.typing import NDArray
 from scipy.io.wavfile import read as wav_read
 
 from src.utils.misc import Timer
+
 
 # _______________________________ LOGGER _______________________________
 
@@ -22,8 +23,8 @@ class BaseLogger(logging.Logger):
     '''
 
     def __init__(self, name: str):
-        ''' Initialize the logger with a name. ''' 
-        
+        ''' Initialize the logger with a name. '''
+
         super().__init__(name=name)
 
         # The default formatter is the identity function
@@ -33,10 +34,10 @@ class BaseLogger(logging.Logger):
 
     @property
     def formatter(self) -> Callable[[str], str]: return self._formatter
-    
+
     @formatter.setter
     def formatter(self, prefix: Callable[[str], str]): self._formatter = prefix
-    
+
     def reset_formatter(self): self._formatter = lambda x: x
 
     # --- LOGGING CHANNELS ---
@@ -56,11 +57,20 @@ class BaseLogger(logging.Logger):
     @abstractmethod
     def _error  (self, msg): raise NotImplementedError
 
-    def handle_error(self, msg: str, exception: Type[Exception] = ValueError): 
+    def handle_error(self, msg: str, exception: Type[Exception] = ValueError):
         ''' Log the error message and raise an exception. '''
 
         self.error(msg)
         raise exception(msg)
+
+class SilentLogger(BaseLogger):
+    ''' Logger implemented as a no-op. '''
+
+    def __init__(self): super().__init__(name='SilentLogger')
+
+    def _info   (self, msg): pass
+    def _warning(self, msg): pass
+    def _error  (self, msg): pass
 
 
 class PrintLogger(BaseLogger):
@@ -71,16 +81,6 @@ class PrintLogger(BaseLogger):
     def _info   (self, msg): print(f"INFO:  {msg}")
     def _warning(self, msg): print(f"WARN:  {msg}")
     def _error  (self, msg): print(f"ERROR: {msg}")
-
-
-class SilentLogger(BaseLogger):
-    ''' Logger implemented as a no-op. '''
-
-    def __init__(self): super().__init__(name='SilentLogger')
-
-    def _info   (self, msg): pass
-    def _warning(self, msg): pass
-    def _error  (self, msg): pass
 
 
 class FileLogger(BaseLogger):
@@ -134,7 +134,6 @@ class PathUtils:
         file, ext = os.path.splitext(PathUtils.get_file(path))
         return ext[1:].lower() # Remove the dot
     
-
 class IOUtils:
 
     @staticmethod

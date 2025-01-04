@@ -1,12 +1,13 @@
 import math
 import time
-from typing import Tuple, TypeVar
+from typing import List, Tuple, TypeVar
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from src.model.typing import RGBColor
 
 # _______________________________ TYPING _______________________________
-
-# Type alias
-Size  = Tuple[int, int]
-Shape = Tuple[int, ...]
 
 # Type generics
 T = TypeVar('T')
@@ -39,7 +40,20 @@ class Timer:
 
     def reset(self): self.start = time.time()
 
+# _______________________________ COLOR _______________________________
 
+def generate_palette(n: int) -> List[RGBColor]:
+    
+    if n <= 0: raise ValueError(f"The number of colors must be positive, got {n}. ")
+
+    # Generate evenly spaced points in HSV space
+    hues    = np.linspace(0, 1, n, endpoint=False)  # Evenly spaced hues
+    palette = [tuple(int(c * 255) for c in plt.cm.hsv(hue)[:3]) for hue in hues]  # type: ignore - hsv in plt.cm is a valid color map
+
+    return palette  # type: ignore - by construction the tuples have 3 elements
+
+
+# _______________________________ PLOTTING _______________________________
 
 def grid_size(n: int) -> Tuple[int, int]:
 

@@ -4,35 +4,54 @@ from dotenv import load_dotenv
 from src.model.calibration import CalibratedVideoStream
 from src.model.stream import VideoStream, SynchronizedVideoStream
 from src.utils.misc import Timer
-from src.utils.io_ import FileLogger, IOUtils
+from src.utils.io_ import IOUtils
 from src.preprocessing import ChessboardCameraCalibrator
+from src.utils.io_ import FileLogger
 
 load_dotenv()
 
 DATA_DIR = os.getenv('DATA_DIR', '.')
 OUT_DIR  = os.getenv('OUT_DIR', '.')
 
-CAMERA           = 'cam2-moving_light'
+C_ID = 2
+
+match C_ID:
+
+    case 1:
+
+        CAMERA          = 'cam1-static'
+        WINDOW_SIZE     = (324, 576)
+        CALIBRATION_EXT = 'mov'
+    
+    case 2:
+
+        CAMERA          = 'cam2-moving_light'
+        WINDOW_SIZE     = (576, 324)
+        CALIBRATION_EXT = 'mp4'
+
+    case _:
+
+        raise ValueError(f'Invalid camera id {C_ID}. ')
+
 CALIBRATION_FILE = 'calibration'
-CALIBRATION_EXT  = 'mp4'
 EXP_NAME         = 'coin1'
 
-VIDEO_PATH       = os.path.join(DATA_DIR, CAMERA,   f'{CALIBRATION_FILE}.{CALIBRATION_EXT}')
+VIDEO_PATH       = os.path.join(DATA_DIR, CAMERA,  f'{CALIBRATION_FILE}.{CALIBRATION_EXT}')
 CALIBRATION_DIR  = os.path.join(OUT_DIR, EXP_NAME, f'calibration')
-CALIBRATION_FILE = os.path.join(CALIBRATION_DIR,    f'{CAMERA}.pkl')
+CALIBRATION_FILE = os.path.join(CALIBRATION_DIR,   f'{CAMERA}.pkl')
 
 CHESSBOARD_SIZE = (9, 6)
 SAMPLES         = 50
-
-WINDOW_SIZE = (576, 324)
 
 if __name__ == "__main__":
 
     # Output directory
     IOUtils.make_dir(path=CALIBRATION_DIR)
     logger = FileLogger(file=os.path.join(CALIBRATION_DIR, f'{CAMERA}_calibration.log'))
-    logger.info(msg=f'Saving synchronization data for experiment {EXP_NAME} '
-                f'of camera {CAMERA} to {CALIBRATION_DIR} . ')
+    logger.info(
+        msg=f'Saving synchronization data for experiment {EXP_NAME} '
+            f'of camera {CAMERA} to {CALIBRATION_DIR} . '
+    )
     logger.info(msg=f'')
 
     # Calibration object
@@ -65,9 +84,7 @@ if __name__ == "__main__":
     # Playing Distorted VS Undistorted video
     logger.info(msg='PLAYING DISTORTED VS UNDISTORTED VIDEO')
     timer.reset()
-    distorted_video   = VideoStream          (path=VIDEO_PATH, name='uncalibrated')
-    undistorted_video = CalibratedVideoStream(path=VIDEO_PATH, name='calibrated', calibration=camera_calibration)
-    sync_video = SynchronizedVideoStream(streams=[distorted_video, undistorted_video], logger=logger)
-    sync_video.play(window_size=WINDOW_SIZE)
+    undistorted_video = CalibratedVideoStream(path=VIDEO_PATH, calibration=camera_calibration)
+    undistorted_video.play(window_size=WINDOW_SIZE)
     logger.info(msg=f'Video played in {timer}. ')
     logger.info(msg='')

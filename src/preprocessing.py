@@ -1,6 +1,7 @@
+import math
 import os
 import numpy as np
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,13 +11,15 @@ import ffmpeg
 import cv2 as cv
 
 
+from src.model.typing import Size2D
 from src.model.calibration import CameraCalibration
 from src.model.stream import VideoStream
 from src.utils.io_ import (
-    BaseLogger, SilentLogger, 
     PathUtils, AudioFile, VideoFile
 )
-from src.utils.misc import Timer, Size
+from src.utils.misc import Timer
+from src.utils.io_ import SilentLogger
+from src.utils.io_ import BaseLogger
 
 
 class VideoSync:
@@ -336,7 +339,7 @@ class ChessboardCameraCalibrator(VideoStream):
     def __init__(
             self, 
             path            : str, 
-            chessboard_size : Size,
+            chessboard_size : Size2D,
             samples         : int,
             logger          : BaseLogger = SilentLogger(), 
             verbose         : bool       = False
@@ -347,7 +350,7 @@ class ChessboardCameraCalibrator(VideoStream):
 
         super().__init__(path=path, logger=logger, verbose=verbose)
 
-        self._chessboard_size: Size = chessboard_size
+        self._chessboard_size: Size2D = chessboard_size
         self._samples:         int  = samples
 
         self._reset_img_points()
@@ -371,7 +374,7 @@ class ChessboardCameraCalibrator(VideoStream):
         return obj_point
     
     @property
-    def chessboard_size(self) -> Size: return self._chessboard_size
+    def chessboard_size(self) -> Size2D: return self._chessboard_size
 
     @property
     def samples(self) -> int: return self._samples
@@ -389,7 +392,7 @@ class ChessboardCameraCalibrator(VideoStream):
             f"samples={self.samples}; "\
             f"skip frames={self.skip_frames}) "\
     
-    def calibrate(self, window_size: Size | None = None) -> CameraCalibration:
+    def calibrate(self, window_size: Size2D | None = None) -> CameraCalibration:
         ''' Calibrate the camera using the collected image points. '''
 
         self._reset_img_points()
@@ -397,7 +400,7 @@ class ChessboardCameraCalibrator(VideoStream):
         # Collect image points
         self._logger.info(msg=f"Collecting image point for camera using {self.samples} samples ... ")
         timer = Timer()
-        self.play(skip_frames=self.skip_frames, window_size=window_size)
+        self.play(start=self.skip_frames, skip_frames=self.skip_frames, window_size=window_size)
         self._logger.info(msg=f'Completed in {timer}. Collected samples: {len(self._img_points)}.')
 
         # Compute object points
@@ -418,19 +421,22 @@ class ChessboardCameraCalibrator(VideoStream):
         )
     
 
-    def _process_frame(self, frame: NDArray, frame_id: int) -> NDArray:
+    def _process_frame(self, frame: NDArray, frame_id: int) -> Dict[str, NDArray]:
 
         corners = self._find_chessboard_corners(frame=frame)
 
         if corners is not None:
 
             self._img_points.append(corners)
-            frame_ = cv.drawChessboardCorners(frame, self._chessboard_size, corners, True)
+            frame_ = cv.drawChessboardCorners(frame.copy(), self._chessboard_size, corners, True)
+    
+        else:
 
-            return super()._process_frame(frame=frame_, frame_id=frame_id)
+            frame_ = frame
+            if frame_id != -1: # For debugging
+                self._logger.warning(msg=f"Unable to find chessboard in frame {frame_id}")
 
-        self._logger.warning(msg=f"Unable to find chessboard in frame {frame_id}")
-        return frame
+        return {'calibration': frame_} | super()._process_frame(frame=frame, frame_id=frame_id)
     
     def _find_chessboard_corners(self, frame: NDArray) -> NDArray | None:
 
