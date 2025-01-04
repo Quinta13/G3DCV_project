@@ -48,13 +48,16 @@ def generate_palette(n: int, palette_type: str = "hsv") -> List[RGBColor]:
     if palette_type in plt.colormaps():
         # Usa le colormap predefinite di Matplotlib
         colormap = plt.cm.get_cmap(palette_type)
-        return  [tuple(int(c * 255) for c in colormap(i / n)[:3]) for i in range(n)]  # type: ignore
+        palette: List[RGBColor] = [ # type: ignore - tuple has exact length three
+            tuple(int(c * 255) for c in colormap(i / n)[:3]) 
+            for i in range(n)
+        ]
+        return palette
     
     raise ValueError(
         f"Invalid palette_type '{palette_type}'. " 
         f"Available options are: {', '.join(plt.colormaps()[:10])} ... "
     )
-
 
 # _______________________________ PLOTTING _______________________________
 

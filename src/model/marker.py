@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import time
 from typing import Dict, Iterable, Iterator, List, Sequence, Set, Tuple
 from dataclasses import dataclass
 
+from matplotlib import pyplot as plt
 import numpy as np
 import cv2 as cv
 from numpy.typing import NDArray
@@ -215,7 +217,9 @@ class Contour:
 	@property
 	def hierarchy(self) -> Contour.ContourHierarchy: return self._hierarchy
 
-	def draw(self, frame: Frame, color: RGBColor = (255, 0, 0), thickness: int = 2, adjusted: bool = True) -> Frame:
+	def draw(self, frame: Frame, color: RGBColor = (255, 0, 0), thickness: int = 2, fill: bool = False, adjusted: bool = True) -> Frame:
+	
+		if fill: thickness = cv.FILLED
 
 		contours = self.contour if adjusted else self.contour_orig
 
@@ -223,7 +227,17 @@ class Contour:
 
 		return frame
 	
-	def is_quadrilateral(self) -> bool: return len(self.contour) == 4
+	def is_quadrilateral(self, min_area: int = 100) -> bool: 
+		
+		if len(self.contour) != 4: return False
+
+		# Check mimimum area
+		area = cv.contourArea(self.contour)
+		if area < min_area: return False
+
+		# Check convexity
+		return cv.isContourConvex(self.contour)
+	
 
 	def is_circle(self) -> bool: 
 		
@@ -237,6 +251,17 @@ class Contour:
 		circularity = 4 * np.pi * area / (perimeter ** 2)
 
 		return circularity > Contour._CIRCULARITY_THRESHOLD
+	
+	def is_border_contour(self, frame: Frame, border: int = 10) -> bool:
+
+		# Check if the contour is close to the border
+		x, y, w, h = cv.boundingRect(self.contour)
+		frame_h, frame_w, *_ = frame.shape
+
+		return  x     <           border or\
+				y     <           border or\
+				x + w > frame_w - border or\
+				y + h > frame_h - border
 	
 	def frame_mean_value(self, frame: Frame, fill: bool = False, child_subtract: Contour | None = None) -> float:
 
@@ -403,14 +428,20 @@ class Marker:
 
 class MarkerDetector:
 
-	WHITE_THRESHOLD = 255 - 5
-	BLACK_THRESHOLD =   0 + 5
+	def __init__(
+		self, 
+		white_thresh: int = 255 - 5,
+		black_thresh: int =   0 + 5
+	):
 
-	def __init__(self, logger: BaseLogger = SilentLogger(), verbose: bool = False):
-
-		self._logger         = logger
-		self._logger_verbose = logger if verbose else SilentLogger()
-		self._is_verbose     = verbose
+		self._white_thresh = white_thresh
+		self._black_thresh = black_thresh
+	
+	def __str__(self) -> str: return f'MarkerDetector['\
+		f'white={self._white_thresh}, '\
+		f'black={self._black_thresh}]'
+	
+	def __repr__(self) -> str: return str(self)
 	
 	def _detect_corners(self, frame: Frame, contours: Contours) -> Tuple[Tuple[Contour, Contour] | None, str]:
     
@@ -421,13 +452,18 @@ class MarkerDetector:
 		for contour in contours:
 
 			# Skip if a) not a quadrilateral or b) has no parent
-			if not contour.is_quadrilateral() or contour.hierarchy.parent is None: continue
+			if not contour.is_quadrilateral()         : continue
+			if contour.hierarchy.parent is None       : continue
+			if contour.is_border_contour(frame=frame) : print("Skipping"); continue
 
 			# Get parent contour
 			parent = contours[contour.hierarchy.parent]
 
 			# Skip if parent is not a quadrilateral
 			if not parent.is_quadrilateral(): continue
+
+			# Skip if parent is a border contour
+			if parent.is_border_contour(frame=frame): continue
 
 			# Append to list
 			nested_quadrilaterls.append((contour, parent))
@@ -439,13 +475,17 @@ class MarkerDetector:
 		inner, outer = nested_quadrilaterls[0]
 
 		# Check black to white
-		inner_white = inner.frame_mean_value(frame=frame) > self.BLACK_THRESHOLD
-		outer_black = outer.frame_mean_value(frame=frame) < self.WHITE_THRESHOLD
+		inner_child = contours[inner.hierarchy.first_child] if inner.hierarchy.first_child is not None else None
+		white_mean = inner.frame_mean_value(frame=frame, child_subtract=inner_child)
+		black_mean = outer.frame_mean_value(frame=frame, child_subtract=inner)
+
+		inner_white = self._white_thresh < white_mean
+		outer_black = self._black_thresh > black_mean
 
 		if inner_white and outer_black:
 			return (inner, outer), ''
 		else: 
-			return None, f'No black to white transition between squares. '
+			return None, f'No black to white transition between squares. (white mean: {white_mean}, black mean: {black_mean}) '
 	
 	def _detect_anchor(
 			self,
@@ -454,47 +494,60 @@ class MarkerDetector:
 			marker_vertices: Tuple[SortedVertices, SortedVertices],
 		) -> Tuple[Tuple[int, Contour] | None, str]:
 
-		def is_contour_between_points(contour: Contour, point1: Tuple[int, int], point2: Tuple[int, int]) -> bool:
-	
+		def is_contour_between_points(contour: Contour, point1: Point2D, point2: Point2D) -> bool:
+
+			mask1 = np.zeros_like(a=frame, dtype=np.uint8)
+			mask2 = mask1.copy()
+
+			contour.draw(frame=mask1, color=(1, ), fill=True)                                      # type: ignore
+			Point2D.draw_line(frame=mask2, point1=point1, point2=point2, color=(1, ), thickness=3) # type: ignore
+
+			# plt.imshow(mask1 & mask2, cmap='gray'); plt.show()
+
+			return 2 in mask1 + mask2
+
 			# Extract coordinates
-			x1, y1 = point1
-			x2, y2 = point2
-			cx, cy, cw, ch = cv.boundingRect(contour.contour)
+			# x1, y1 = point1
+			# x2, y2 = point2
+			# cx, cy, cw, ch = cv.boundingRect(contour.contour)
 
-			# Sort points to define a region
-			x_min, x_max = [op(x1, x2) for op in (min, max)]
-			y_min, y_max = [op(y1, y2) for op in (min, max)]
+			# # Sort points to define a region
+			# x_min, x_max = [op(x1, x2) for op in (min, max)]
+			# y_min, y_max = [op(y1, y2) for op in (min, max)]
 
-			# Get bounding box of the contour
-			cx_min, cx_max = cx, cx + cw
-			cy_min, cy_max = cy, cy + ch
+			# # Get bounding box of the contour
+			# cx_min, cx_max = cx, cx + cw
+			# cy_min, cy_max = cy, cy + ch
 
-			# Check if the contour's bounding box is within the defined region
-			x_condition = x_min <= cx_min and cx_max <= x_max
-			y_condition = y_min <= cy_min and cy_max <= y_max
+			# # Check if the contour's bounding box is within the defined region
+			# x_condition = x_min <= cx_min and cx_max <= x_max
+			# y_condition = y_min <= cy_min and cy_max <= y_max
 
-			return x_condition and y_condition
+			# return x_condition and y_condition
 
 		# vertex index, circle contour
 		marker_circles: List[Tuple[int, Contour]] = []
 
 		for contour in contours:
 
+			# Skip if border contour TODO Maybe unnecessary since the contour won't be a circle
+			if contour.is_border_contour(frame=frame): continue
+
 			# Skip if is not a circle
 			if not contour.is_circle(): continue
 
 			# Skip if the circle is not white
-			mean_value = contour.frame_mean_value(frame=frame, fill=True)
-			if mean_value < self.WHITE_THRESHOLD: continue
+			# mean_value = contour.frame_mean_value(frame=frame, fill=True)
+			# if mean_value < self._white_thresh: continue
 
 			# For the 4 couples of vertex check if the circle is between the two points
 			inner_vert, outer_vert = marker_vertices
 			for i, (inner, outer) in enumerate(zip(inner_vert.vertices, outer_vert.vertices)):
-				if is_contour_between_points(contour, inner, outer):
+				if is_contour_between_points(contour, Point2D.from_tuple(inner), Point2D.from_tuple(outer)):
 					marker_circles.append((i, contour))
 
-		if len(marker_circles) == 0: return None, f'No white circle found within the marker. '
-		if len(marker_circles) >  1: return None, f'Found multiple white circles within the marker ({len(marker_circles)}). '
+		if len(marker_circles) == 0: return None, f'No anchor found within the marker. '
+		if len(marker_circles) >  1: return None, f'Found multiple anchors within the marker ({len(marker_circles)}). '
 
 		return marker_circles[0], ''
 

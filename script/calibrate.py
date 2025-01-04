@@ -5,7 +5,7 @@ from src.model.calibration import CalibratedVideoStream
 from src.model.stream import VideoStream, SynchronizedVideoStream
 from src.utils.misc import Timer
 from src.utils.io_ import IOUtils
-from src.preprocessing import ChessboardCameraCalibrator
+from model.preprocessing import ChessboardCameraCalibrator
 from src.utils.io_ import FileLogger
 
 load_dotenv()
