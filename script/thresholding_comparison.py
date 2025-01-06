@@ -1,24 +1,22 @@
-import math
 import os
 from typing import Any, Dict, List, Tuple, Type
-from dotenv import load_dotenv
 
 import cv2 as cv
+from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 
 from src.model.stream import SynchronizedVideoStream, VideoStream
 from src.model.calibration import CalibratedVideoStream, CameraCalibration
-from src.utils.io_ import IOUtils
+from src.utils.io_ import BaseLogger, IOUtils, FileLogger
 from src.utils.misc import Timer, grid_size
 from src.model.thresholding import (
     ThresholdedVideoStream,
-    BaseThresholdedVideoStream,
-    OtsuThresholdedVideoStream,
-    TopHatOtsuThresholdedVideoStream,
-    AdaptiveThresholdedVideoStream, 
+    Thresholding,
+    BaseThresholding,
+    OtsuThresholding,
+    TopHatOtsuThresholding,
+    AdaptiveThresholding, 
 )
-from src.utils.io_ import FileLogger
-from src.utils.io_ import PrintLogger
 
 load_dotenv()
 
@@ -54,20 +52,47 @@ SKIP_FRAMES   = 50
 EXAMPLES_PLOT = 5
 
 # name: (threshold class, arguments)
-STREAMS_INFO: Dict[str, Tuple[Type[ThresholdedVideoStream], Dict[str, Any]]] = {
-    'simple_threshold' : (BaseThresholdedVideoStream,       {'t': 50}),
-    'otsu'             : (OtsuThresholdedVideoStream,       {}),
-    'top-hat + otsu'   : (TopHatOtsuThresholdedVideoStream, {'kernel_size': (265, 265), 'kernel_shape': cv.MORPH_CROSS}),
-    'adaptive'         : (AdaptiveThresholdedVideoStream,   {'block_size': 117, 'c': 5})
+STREAMS_INFO: Dict[str, Tuple[Type[Thresholding], Dict[str, Any]]] = {
+    'simple_threshold' : (BaseThresholding,       {'t': 50}),
+    'otsu'             : (OtsuThresholding,       {}),
+    'top-hat + otsu'   : (TopHatOtsuThresholding, {'kernel_size': (265, 265), 'kernel_shape': cv.MORPH_CROSS}),
+    'adaptive'         : (AdaptiveThresholding,   {'block_size': 117, 'c': 5})
 }
 
-if __name__ == "__main__":
+def save_streams_example_frames(sync_stream: SynchronizedVideoStream, logger: BaseLogger) -> None:
 
-    logger = PrintLogger()
+    r, c = grid_size(len(sync_stream))
+
+    step = sync_stream.num_frames // EXAMPLES_PLOT
+
+    for plot_id, frame_id in enumerate(range(0, sync_stream.num_frames, step)):
+
+        fig, axes = plt.subplots(r, c, figsize=(9, 7))
+        axes = axes.flatten()
+
+        for i, stream in enumerate(sync_stream.streams):
+
+            frame = stream[frame_id]['binary'] if stream.name != 'reference' else stream[frame_id]['raw']
+            axes[i].imshow(frame, cmap='gray')
+            axes[i].set_title(stream.name)
+            axes[i].axis('off')
+        
+        for i in range(len(sync_stream.streams), len(axes)):
+            axes[i].axis('off')
+        
+        fig.suptitle(f'Frame {frame_id}')
+
+        out_fp = os.path.join(COMPARISON_DIR, f'{CAMERA}_example_{plot_id}.png')
+        logger.info(msg=f' > Saving example frames n.{plot_id} to {out_fp}. ')
+        plt.tight_layout()
+        fig.savefig(out_fp)
+
+def main():
+
+    logger = FileLogger(file=os.path.join(COMPARISON_DIR, f'{CAMERA}_thresh_comparison.log'))
 
     # Output directory
     IOUtils.make_dir(path=OUT_DIR)
-    logger = FileLogger(file=os.path.join(COMPARISON_DIR, f'{CAMERA}_Thresholded.log'))
     logger.info(msg=f'Saving synchronization data for experiment {EXP_NAME} to {COMPARISON_DIR} .')
     logger.info(msg=f'')
 
@@ -80,10 +105,20 @@ if __name__ == "__main__":
     logger.info(msg='Creating video streams. ')
 
     streams: List[VideoStream] = []
-    for name, (C_stream, args) in STREAMS_INFO.items():
-        stream = C_stream(path=VIDEO, calibration=calibration, name=name, **args)
+
+    for name, (C_threshold, args) in STREAMS_INFO.items():
+
+        stream = ThresholdedVideoStream(
+            path=VIDEO,
+            calibration=calibration,
+            thresholding=C_threshold(**args),
+            name=name,
+            logger=logger
+        )
+
         streams.append(stream)
         logger.info(msg=f' - {stream}')
+    
     logger.info(msg=f'Adding original stream as reference. ')
     streams.append(CalibratedVideoStream(path=VIDEO, calibration=calibration, name='reference'))
     logger.info(msg='')
@@ -99,12 +134,10 @@ if __name__ == "__main__":
     exclude_views = {
         stream.name: [
             view_name for view_name in stream.views
-            if not (view_name == 'binary' or (stream.name=='reference' and view_name=='calibrated'))# or (stream.name == 'reference' and view_name == 'raw'))
+            if not (view_name == 'binary' or (stream.name=='reference' and view_name=='calibrated'))
         ]
         for stream in streams
     }
-
-    print(exclude_views)
 
     sync_stream.play(
         window_size=WINDOW_SIZE,
@@ -116,29 +149,6 @@ if __name__ == "__main__":
 
     # Saving some example frames
     logger.info(msg=f'SAVING EXAMPLE FRAMES')
+    save_streams_example_frames(sync_stream=sync_stream, logger=logger)
 
-    r, c = grid_size(len(sync_stream))
-
-    step = sync_stream.num_frames // EXAMPLES_PLOT
-
-    for plot_id, frame_id in enumerate(range(0, sync_stream.num_frames, step)):
-
-        fig, axes = plt.subplots(r, c, figsize=(9, 7))
-        axes = axes.flatten()
-
-        for i, stream in enumerate(streams):
-
-            frame = stream[frame_id]['binary'] if stream.name != 'reference' else stream[frame_id]['raw']
-            axes[i].imshow(frame, cmap='gray')
-            axes[i].set_title(stream.name)
-            axes[i].axis('off')
-        
-        for i in range(len(streams), len(axes)):
-            axes[i].axis('off')
-        
-        fig.suptitle(f'Frame {frame_id}')
-
-        out_fp = os.path.join(COMPARISON_DIR, f'{CAMERA}_example_{plot_id}.png')
-        logger.info(msg=f' > Saving example frames n.{plot_id} to {out_fp}. ')
-        plt.tight_layout()
-        fig.savefig(out_fp)
+if __name__ == "__main__": main()

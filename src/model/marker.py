@@ -502,28 +502,9 @@ class MarkerDetector:
 			contour.draw(frame=mask1, color=(1, ), fill=True)                                      # type: ignore
 			Point2D.draw_line(frame=mask2, point1=point1, point2=point2, color=(1, ), thickness=3) # type: ignore
 
-			# plt.imshow(mask1 & mask2, cmap='gray'); plt.show()
+			# plt.imshow(mask1 & mask2, cmap='gray'); plt.show() - DEBUG
 
 			return 2 in mask1 + mask2
-
-			# Extract coordinates
-			# x1, y1 = point1
-			# x2, y2 = point2
-			# cx, cy, cw, ch = cv.boundingRect(contour.contour)
-
-			# # Sort points to define a region
-			# x_min, x_max = [op(x1, x2) for op in (min, max)]
-			# y_min, y_max = [op(y1, y2) for op in (min, max)]
-
-			# # Get bounding box of the contour
-			# cx_min, cx_max = cx, cx + cw
-			# cy_min, cy_max = cy, cy + ch
-
-			# # Check if the contour's bounding box is within the defined region
-			# x_condition = x_min <= cx_min and cx_max <= x_max
-			# y_condition = y_min <= cy_min and cy_max <= y_max
-
-			# return x_condition and y_condition
 
 		# vertex index, circle contour
 		marker_circles: List[Tuple[int, Contour]] = []

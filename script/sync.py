@@ -1,21 +1,20 @@
 import os
+
 from dotenv import load_dotenv
 
-from model.preprocessing import VideoSync
+from src.model.preprocessing import VideoSync
 from src.model.stream import SynchronizedVideoStream
-from src.utils.io_ import VideoFile, IOUtils
+from src.utils.io_ import VideoFile, IOUtils, FileLogger
 from src.utils.misc import Timer
-from src.utils.io_ import FileLogger
 
 load_dotenv()
 
 DATA_DIR = os.getenv('DATA_DIR', '.')
 OUT_DIR  = os.getenv('OUT_DIR',  '.')
 
-CAMERA_1     = 'cam1-static'
-CAMERA_2     = 'cam2-moving_light'
-CAMERA_1_EXT = 'mov'
-CAMERA_2_EXT = 'mp4'
+CAMERA_1, CAMERA_1_EXT, CAMERA_1_SIZE = 'cam1-static',       'mov', (324, 576)
+CAMERA_2, CAMERA_2_EXT, CAMERA_2_SIZE = 'cam2-moving_light', 'mp4', (576, 324)
+
 EXP_NAME     = 'coin1'
 
 INPUT_1  = os.path.join(DATA_DIR, CAMERA_1, f'{EXP_NAME}.{CAMERA_1_EXT}')
@@ -23,9 +22,7 @@ INPUT_2  = os.path.join(DATA_DIR, CAMERA_2, f'{EXP_NAME}.{CAMERA_2_EXT}')
 
 SYNC_DIR = os.path.join(OUT_DIR, EXP_NAME, 'sync')
 
-WINDOW_SIZE = [(324, 576), (576, 324)]
-
-if __name__ == "__main__":
+def main():
 
     # Output directory
     IOUtils.make_dir(path=SYNC_DIR)
@@ -59,8 +56,8 @@ if __name__ == "__main__":
         streams=[stream1, stream2],
         logger=logger,
     )
-    sync_stream.play(
-        window_size=WINDOW_SIZE
-    )
+    sync_stream.play(window_size={stream1.name: CAMERA_1_SIZE, stream2.name: CAMERA_2_SIZE})
     logger.info(msg=f'Streaming completed in {timer}. ')
     logger.info(msg='')
+
+if __name__ == '__main__': main()

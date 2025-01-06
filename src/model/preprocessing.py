@@ -392,7 +392,7 @@ class ChessboardCameraCalibrator(VideoStream):
             f"samples={self.samples}; "\
             f"skip frames={self.skip_frames}) "\
     
-    def calibrate(self, window_size: Size2D | None = None) -> CameraCalibration:
+    def calibrate(self, window_size: Dict[str, Size2D] | Size2D | None = None) -> CameraCalibration:
         ''' Calibrate the camera using the collected image points. '''
 
         self._reset_img_points()

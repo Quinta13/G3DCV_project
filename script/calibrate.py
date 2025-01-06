@@ -1,12 +1,10 @@
 import os
 from dotenv import load_dotenv
 
+from src.model.preprocessing import ChessboardCameraCalibrator
 from src.model.calibration import CalibratedVideoStream
-from src.model.stream import VideoStream, SynchronizedVideoStream
 from src.utils.misc import Timer
-from src.utils.io_ import IOUtils
-from model.preprocessing import ChessboardCameraCalibrator
-from src.utils.io_ import FileLogger
+from src.utils.io_ import IOUtils, FileLogger
 
 load_dotenv()
 
@@ -84,7 +82,7 @@ if __name__ == "__main__":
     # Playing Distorted VS Undistorted video
     logger.info(msg='PLAYING DISTORTED VS UNDISTORTED VIDEO')
     timer.reset()
-    undistorted_video = CalibratedVideoStream(path=VIDEO_PATH, calibration=camera_calibration)
+    undistorted_video = CalibratedVideoStream(path=VIDEO_PATH, calibration=camera_calibration, logger=logger)
     undistorted_video.play(window_size=WINDOW_SIZE)
     logger.info(msg=f'Video played in {timer}. ')
     logger.info(msg='')
