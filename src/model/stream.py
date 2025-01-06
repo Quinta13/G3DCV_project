@@ -308,10 +308,10 @@ class SynchronizedVideoStream:
 
         try:
 
-            self._logger.info(f'Stream started. Press {self.EXIT_KEY} to exit.')
-            self._logger.info(f'Press key to activate or deactivate views:')
-            for k, n in view_keys.items(): self._logger.info(f'  {k} - {n}')
-            self._logger.info(f'')
+            self._logger.info(msg=f'Stream started. Press {self.EXIT_KEY} to exit.')
+            self._logger.info(msg=f'Press key to activate or deactivate views:')
+            for k, n in view_keys.items(): self._logger.info(msg=f'  {k} - {n}')
+            self._logger.info(msg=f'')
 
             # Playback loop
             while True:

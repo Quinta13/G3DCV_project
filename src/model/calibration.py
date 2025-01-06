@@ -164,9 +164,9 @@ class CalibratedVideoStream(VideoStream):
 
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
 
-        frame_dict = super()._process_frame(frame=frame, frame_id=frame_id)
+        views = super()._process_frame(frame=frame, frame_id=frame_id)
 
         # Undistort the frame
-        frame_calibrated = self._calibration.undistort(frame_dict['raw'].copy())
+        frame_calibrated = self._calibration.undistort(views['raw'].copy())
 
-        return {'calibrated': frame_calibrated} | frame_dict
+        return views | {'calibrated': frame_calibrated}

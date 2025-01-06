@@ -15,7 +15,7 @@ class Thresholding(ABC):
     @abstractmethod
     def __call__(self, frame: Frame) -> Views: 
 
-        if len(frame.shape) == 3: frame_g = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        if len(frame.shape) == 3: frame_g = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
         else:                     frame_g = frame
 
         return {'grayscale': frame_g}
@@ -50,8 +50,8 @@ class BaseThresholding(Thresholding):
     
     def __call__(self, frame: Frame) -> Views:
 
-        frame_dict = super().__call__(frame=frame)
-        gray = frame_dict['grayscale']
+        views = super().__call__(frame=frame)
+        gray = views['grayscale']
 
         # Apply Gaussian blur
         if self._kernel_size is None:
@@ -64,7 +64,7 @@ class BaseThresholding(Thresholding):
         # Apply thresholding
         _, frame_b = cv.threshold(src=frame_blur, thresh=self._t, maxval=255, type=cv.THRESH_BINARY)
 
-        return blur_dict | {'binary': frame_b} | frame_dict
+        return views | blur_dict | {'binary': frame_b}
 
 class OtsuThresholding(Thresholding):
 
@@ -86,8 +86,8 @@ class OtsuThresholding(Thresholding):
     
     def __call__(self, frame: Frame) -> Views:
 
-        frame_dict = super().__call__(frame=frame)
-        gray = frame_dict['grayscale']
+        views = super().__call__(frame=frame)
+        gray = views['grayscale']
 
         # Apply Gaussian blur
         if self._kernel_size is None:
@@ -101,7 +101,7 @@ class OtsuThresholding(Thresholding):
         # NOTE: thresh = 0 is ignored in Otsu's method
         _, frame_b = cv.threshold(src=frame_blur, thresh=0, maxval=255, type=cv.THRESH_BINARY + cv.THRESH_OTSU)
 
-        return blur_dict | {'binary': frame_b} | frame_dict
+        return views |blur_dict | {'binary': frame_b} 
 
 class TopHatOtsuThresholding(Thresholding):
 
@@ -117,8 +117,8 @@ class TopHatOtsuThresholding(Thresholding):
 
     def __call__(self, frame: Frame) -> Views:
 
-        frame_dict = super().__call__(frame=frame)
-        gray = frame_dict['grayscale']
+        views = super().__call__(frame=frame)
+        gray = views['grayscale']
 
         # Apply top hat transform
         kernel   = cv.getStructuringElement(shape=self._kernel_shape, ksize=self._kernel_size)
@@ -127,7 +127,7 @@ class TopHatOtsuThresholding(Thresholding):
         # Otsu thresholding
         tresh, frame_b = cv.threshold(frame_th, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
-        return {'top-hat': frame_th, 'binary': frame_b} | frame_dict
+        return views | {'top-hat': frame_th, 'binary': frame_b}
     
 class AdaptiveThresholding(Thresholding):
 
@@ -143,8 +143,8 @@ class AdaptiveThresholding(Thresholding):
 
     def __call__(self, frame: Frame) -> Views:
 
-        frame_dict = super().__call__(frame=frame)
-        gray = frame_dict['grayscale']
+        views = super().__call__(frame=frame)
+        gray = views['grayscale']
 
         # Apply adaptive thresholding
         frame_b = cv.adaptiveThreshold(
@@ -156,7 +156,7 @@ class AdaptiveThresholding(Thresholding):
             blockSize=self._block_size
         )
 
-        return {'binary': frame_b} | frame_dict
+        return views | {'binary': frame_b}
 
 class AdaptiveThresholdingPlusClosing(AdaptiveThresholding):
 
@@ -174,15 +174,15 @@ class AdaptiveThresholdingPlusClosing(AdaptiveThresholding):
     def __call__(self, frame: Frame) -> Views:
         
         # 1. Apply adaptive Thresholded
-        frame_dict = super().__call__(frame=frame)
-        adaptive = frame_dict['binary']
+        views = super().__call__(frame=frame)
+        adaptive = views['binary']
 
         # 2. Apply morphological closing
         kernel        = cv.getStructuringElement(shape=self._kernel_shape, ksize=self._kernel_size)
         frame_closing = cv.morphologyEx(src=adaptive, op=cv.MORPH_CLOSE, kernel=kernel, iterations=1)
 
         # NOTE: The 'binary' key is overwriting the previous value
-        return {'adaptive': adaptive} | frame_dict | {'binary': frame_closing}
+        return views | {'adaptive': adaptive} | {'binary': frame_closing}
 
 class ThresholdedVideoStream(CalibratedVideoStream):
 
@@ -208,8 +208,8 @@ class ThresholdedVideoStream(CalibratedVideoStream):
 
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
 
-        frame_dict = super()._process_frame(frame=frame, frame_id=frame_id)
-        calibrated_frame = frame_dict['calibrated']
-        threhsolding_dict = self._thresholding(frame=calibrated_frame)
+        views = super()._process_frame(frame=frame, frame_id=frame_id)
+        calibrated_frame = views['calibrated']
+        thresh_views = self._thresholding(frame=calibrated_frame)
 
-        return threhsolding_dict | frame_dict
+        return views | thresh_views

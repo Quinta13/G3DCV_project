@@ -440,7 +440,7 @@ class ChessboardCameraCalibrator(VideoStream):
     
     def _find_chessboard_corners(self, frame: NDArray) -> NDArray | None:
 
-        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        gray = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
 
         ret, corners = cv.findChessboardCorners(gray, self._chessboard_size, None)
 
