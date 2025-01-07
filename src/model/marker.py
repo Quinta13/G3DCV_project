@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 
 from src.model.calibration import CameraCalibration
 from src.model.thresholding import ThresholdedVideoStream, Thresholding
-from src.model.typing import Frame, RGBColor, Views, Size2D
+from src.model.typing import Frame, RGBColor, Views, Size2D, LightDirection
 from src.utils.misc   import default, generate_palette
 from src.utils.io_ import BaseLogger, SilentLogger
 
@@ -461,6 +461,64 @@ class Marker:
 	
 	@property
 	def corners(self) -> Points2D: return [self.c0, self.c1, self.c2, self.c3]
+
+	@property
+	def corners_array(self) -> NDArray: return np.array([tuple(iter(corner)) for corner in self.corners], dtype=np.float32)
+
+	def warp(self, frame: Frame, size: Size2D) -> Frame:
+
+		width, height = size
+
+		# Define the destination points
+		dst_points = np.array([
+			[        0,          0],
+			[width - 1,          0],
+			[width - 1, height - 1],
+			[        0, height - 1]
+		], dtype=np.float32)
+
+		# Compute the perspective transform matrix
+		transform_matrix = cv.getPerspectiveTransform(src=self.corners_array, dst=dst_points)
+
+		# Apply the perspective transform
+		warped = cv.warpPerspective(src=frame, M=transform_matrix, dsize=(width, height))
+
+		return warped
+	
+	def camera_2d_position(self, calibration: CameraCalibration) -> LightDirection:
+
+		WORD_POINTS = np.array([
+			[0, 0], [1, 0], [1, 1], [0, 1]
+		], dtype=np.float32)
+
+		# Compute homography matrix H
+		H, _ = cv.findHomography(srcPoints=self.corners_array, dstPoints=WORD_POINTS)
+
+		# Normalize the homography using the intrinsic matrix
+		H_normalized = np.linalg.inv(calibration.camera_mat) @ H
+
+		# Extract columns of H'
+		h1, h2, h3 = H_normalized.T
+
+		# Compute scale factor
+		scale = 2 / (np.linalg.norm(h1) + np.linalg.norm(h2))
+
+		# Compute rotation and translation
+		r1 = scale * h1
+		r2 = scale * h2
+		r3 = np.cross(r1, r2)  # Ensure orthogonality # type: ignore
+		t = scale * h3
+
+		# Construct the rotation matrix
+		R = np.stack((r1, r2, r3), axis=1)
+
+		# Ensure R is a valid rotation matrix using SVD
+		U, _, Vt = np.linalg.svd(R)  # type: ignore
+		R = U @ Vt
+
+		x, y, _ = t
+
+		return x, y
 
 	def draw(self, frame: Frame) -> Frame:
 

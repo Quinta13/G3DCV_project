@@ -16,3 +16,5 @@ Frame = cv2.typing.MatLike
 
 Views = Dict[str, Frame]
 ''' Represents different possible frame views of a video stream, indexed by a string key. '''
+
+LightDirection = Tuple[float, float]
