@@ -1,5 +1,6 @@
 # Environments
 .env
+.vscode
 
 # Data folder
 data

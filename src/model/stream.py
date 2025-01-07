@@ -25,7 +25,6 @@ class VideoStream:
         logger  : BaseLogger = SilentLogger(),
         verbose : bool       = False
     ):
-        ''' Initialize a video stream object from a video file. '''
 
         # Logging
         self._logger         : BaseLogger = logger
@@ -153,6 +152,8 @@ class VideoStream:
         
         single_sync_stream = SynchronizedVideoStream(streams=[self], logger=self._logger, verbose=self._is_verbose)
         single_sync_stream.play(start=start, end=end, skip_frames=skip_frames, window_size=window_size_, exclude_views={self.name: exclude_views})
+
+    def _is_debug(self, frame_id: int) -> bool: return frame_id < 0
     
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
         """
@@ -322,7 +323,7 @@ class SynchronizedVideoStream:
                         frame_views = next(iterator) # type: ignore
                         for view, frame in frame_views.items():
                             name = stream_view_name(stream=stream.name, view=view)
-                            if active_views[name]:  cv.imshow(name, frame)
+                            if active_views[name]:  cv.imshow(name, cv.cvtColor(frame, cv.COLOR_RGB2BGR))
                     except StopIteration:
                         # If any stream is finished, exit playback
                         cv.destroyAllWindows()

@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 from src.model.calibration import CameraCalibration
 from src.model.thresholding import ThresholdedVideoStream, Thresholding
 from src.model.typing import Frame, RGBColor, Views, Size2D
-from src.utils.misc   import generate_palette
+from src.utils.misc   import default, generate_palette
 from src.utils.io_ import BaseLogger, SilentLogger
 
 Points2D = Sequence['Point2D']
@@ -88,9 +88,9 @@ class Point2D:
 		**kwargs
 	) -> Frame:
 		
-		if not point1.in_frame(frame): raise ValueError(f'Point {point1} is out of frame bounds.')
-		if not point2.in_frame(frame): raise ValueError(f'Point {point2} is out of frame bounds.')
-		
+		for point in [point1, point2]:
+			if not point.in_frame(frame): raise ValueError(f'Point {point} is out of frame bounds.')
+
 		x1, y1 = point1
 		x2, y2 = point2
 		
@@ -100,18 +100,16 @@ class Point2D:
 
 class SortedVertices:
 
-	def __init__(self, vertices: NDArray) -> None:
+	def __init__(self, vertices: NDArray, center: Point2D | None = None) -> None:
 
-		self._vertices = SortedVertices._sort_point(vertices=vertices)
+		center_: Point2D = default(center, Point2D.from_tuple(np.mean(vertices, axis=0)))
+		self._vertices = SortedVertices._sort_point(vertices=vertices, center=center_)
 
 	@staticmethod
-	def _sort_point(vertices: NDArray) -> NDArray:
+	def _sort_point(vertices: NDArray, center: Point2D) -> NDArray:
     
-		# Calculate the center of the contour
-		center = np.mean(vertices, axis=0)
-		
 		# Calculate the angle of each point w.r.t. the center
-		angles = np.arctan2(vertices[:, 1] - center[1], vertices[:, 0] - center[0])
+		angles = np.arctan2(vertices[:, 1] - center.y, vertices[:, 0] - center.x)
 		
 		# Sort vertices by angle
 		sorted_indices = np.argsort(angles)
@@ -127,6 +125,18 @@ class SortedVertices:
 	@property
 	def vertices(self) -> NDArray: return self._vertices
 
+	def align_to(self, other: SortedVertices):
+
+		if len(self) != len(other): raise ValueError(f'Vertices must have the same length, got {len(self)} and {len(other)}. ')
+
+		# Compute the angle between the first point and each other point of the other set of vertices
+
+		distances = np.linalg.norm(other.vertices - self.vertices[0], axis=1)
+
+		closest_index = int(np.argmin(distances))
+
+		self.roll(n=-closest_index)
+
 	def draw(self, frame: Frame, palette: List[RGBColor] | RGBColor = (255, 0, 0), radius: int = 5, thickness: int = 2) -> Frame:
 
 		palette_ = palette if isinstance(palette, list) else [palette] * len(self)
@@ -138,7 +148,7 @@ class SortedVertices:
 
 		return frame
 
-	def shift(self, n: int): self._vertices = np.roll(self._vertices, -n, axis=0)
+	def roll(self, n: int): self._vertices = np.roll(self._vertices, -n, axis=0)
 
 
 class Contour:
@@ -180,7 +190,7 @@ class Contour:
 	
 	# HYPERPARAMETERS
 	_APPROX_FACTOR         : float = 0.01
-	_CIRCULARITY_THRESHOLD : float = 0.85
+	_CIRCULARITY_THRESHOLD : float = 0.80
     
 	def __init__(self, id: int, contour: NDArray, hierarchy: Contour.ContourHierarchy):
 
@@ -208,11 +218,11 @@ class Contour:
 	@property
 	def mean_point(self) -> Point2D: return Point2D.from_tuple(np.mean(self.contour, axis=0, dtype=np.int32)[0])
 
-	def to_sorted_vertex(self, adjusted: bool = True) -> SortedVertices: 
+	def to_sorted_vertex(self, center: Point2D | None = None, adjusted: bool = True) -> SortedVertices:
 
 		vertices = self.contour if adjusted else self.contour_orig
 
-		return SortedVertices(vertices=vertices[:, 0, :])
+		return SortedVertices(vertices=vertices[:, 0, :], center=center)
 	
 	@property
 	def area(self) -> float: return cv.contourArea(self.contour)
@@ -236,7 +246,7 @@ class Contour:
 	def is_quadrilateral(self) -> bool:  return len(self.contour) == 4 and cv.isContourConvex(self.contour)
 
 	def is_circle(self) -> bool: 
-		
+
 		# Compute circularity | 4pi * area / perimeter^2
 		
 		if self.perimeter == 0: return False  # Avoid division by zero for degenerate contours
@@ -244,16 +254,18 @@ class Contour:
 
 		return circularity > Contour._CIRCULARITY_THRESHOLD
 	
-	def is_border_contour(self, frame: Frame, border: int = 10) -> bool:
+	def is_border_contour(self, frame: Frame, border: int = 10, min_points: int = 3) -> bool:
 
 		# Check if the contour is close to the border
 		x, y, w, h = cv.boundingRect(self.contour)
 		frame_h, frame_w, *_ = frame.shape
 
-		return  x     <           border or\
-				y     <           border or\
-				x + w > frame_w - border or\
-				y + h > frame_h - border
+		return  sum([
+			x     <           border,
+			y     <           border,
+			x + w > frame_w - border,
+			y + h > frame_h - border,
+		]) >= min_points
 	
 	def frame_mean_value(self, frame: Frame, fill: bool = False, descendants: List[Contour] | None = None) -> Tuple[float, Frame]:
 
@@ -300,18 +312,35 @@ class Contour:
 
 class Contours:
 
-	def __init__(self, frame: Frame) :
+	def __init__(self, frame: Frame, min_area: int | None = None, max_area: int | None = None):
 
 		contours, hierarchy = cv.findContours(image=frame, mode=cv.RETR_TREE, method=cv.CHAIN_APPROX_SIMPLE)
 
-		self._contours_dict = {
-			contour_id: Contour(
-				id=contour_id, 
-				contour=contour, 
-				hierarchy=Contour.ContourHierarchy.from_hierarchy(hierarchy=hierarchy_line)
-			)
-			for contour_id, (contour, hierarchy_line) in enumerate(zip(contours, hierarchy[0]))
-		}
+		if len(contours) == 0: 
+			self._contours_dict = {}
+			return
+		
+		self._contours_dict = {}
+
+		for contour_id, (contour, hierarchy_line) in enumerate(zip(contours, hierarchy[0])):
+
+			area = cv.contourArea(contour)
+			if (min_area is None or area >= min_area) and (max_area is None or area <= max_area):
+				self._contours_dict[contour_id] = Contour(
+					id=contour_id, 
+					contour=contour, 
+					hierarchy=Contour.ContourHierarchy.from_hierarchy(hierarchy=hierarchy_line)
+				)
+
+		# self._contours_dict = {
+		# 	contour_id: Contour(
+		# 		id=contour_id, 
+		# 		contour=contour, 
+		# 		hierarchy=Contour.ContourHierarchy.from_hierarchy(hierarchy=hierarchy_line)
+		# 	)
+		# 	for contour_id, (contour, hierarchy_line) in enumerate(zip(contours, hierarchy[0]))
+
+		# }
 
 	def __str__     (self)           -> str              : return f'Contours[curvers: {len(self)}]'
 	def __repr__    (self)           -> str              : return str(self)
@@ -319,17 +348,17 @@ class Contours:
 	def __iter__    (self)           -> Iterator[Contour]: return iter(self._contours_dict.values())
 	def __getitem__ (self, key: int) -> Contour          : return self._contours_dict[key]
 
-	def filter_by_area(self, min_area: int | None = None, max_area: int | None = None):
+	# def filter_by_area(self, min_area: int | None = None, max_area: int | None = None):
 
-		# TODO This will break the hierarchy, need to update the hierarchy as well
+	# 	# TODO This will break the hierarchy, need to update the hierarchy as well
 
-		if min_area is None and max_area is None: return self
+	# 	if min_area is None and max_area is None: return self
 
-		self._contours_dict = {
-			id: contour
-			for id, contour in self._contours_dict.items()
-			if (min_area is None or contour.area >= min_area) and (max_area is None or contour.area <= max_area)
-		}
+	# 	self._contours_dict = {
+	# 		id: contour
+	# 		for id, contour in self._contours_dict.items()
+	# 		if (min_area is None or contour.area >= min_area) and (max_area is None or contour.area <= max_area)
+	# 	}
 
 	def get_descendants(self, contour: Contour) -> Sequence[Contour]:
     
@@ -396,7 +425,7 @@ class Marker:
 		if not anchor_contour.is_circle(): raise ValueError(f'Invalid circle contour for the marker. ') 
 
 		# Reorder vertices
-		marker_vertices.shift(n=c0_vertex_id)
+		marker_vertices.roll(n=c0_vertex_id)
 
 		c0, c1, c2, c3 = [marker_vertices[i] for i in range(4)]
 		point = anchor_contour.mean_point
@@ -452,19 +481,23 @@ class MarkerDetector:
 		self, 
 		white_thresh: int = 255 - 25,
 		black_thresh: int =   0 + 25,
-		min_area    : int = 100,
+		min_area    : int = 200,
 	):
 
 		self._white_thresh = white_thresh
 		self._black_thresh = black_thresh
 		self._min_area     = min_area
 	
-	def __str__(self) -> str: return f'MarkerDetector['\
-		f'white={self._white_thresh}, '\
-		f'black={self._black_thresh}, '\
-		f'min_area={self._min_area}]'
+	def __str__(self) -> str: return f'MarkerDetector[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
 	
 	def __repr__(self) -> str: return str(self)
+
+	@property
+	def params(self) -> Dict[str, int]: return {
+		'white_thresh': self._white_thresh,
+		'black_thresh': self._black_thresh,
+		'min_area'    : self._min_area
+	}
 	
 	def _detect_corners(self, frame: Frame, contours: Contours) -> Tuple[Tuple[Contour, Contour] | None, str, Views]:
     
@@ -477,19 +510,22 @@ class MarkerDetector:
 			# Skip if a) not a quadrilateral or b) has no parent
 			if not contour.is_quadrilateral()         : continue
 			if contour.hierarchy.parent is None       : continue
-			if contour.is_border_contour(frame=frame) : continue
+			# if contour.is_border_contour(frame=frame) : continue
 
 			# Get parent contour
-			parent = contours[contour.hierarchy.parent]
+			try:
+				parent = contours[contour.hierarchy.parent]
 
-			# Skip if parent is not a quadrilateral
-			if not parent.is_quadrilateral(): continue
+				# Skip if parent is not a quadrilateral
+				if not parent.is_quadrilateral(): continue
 
-			# Skip if parent is a border contour
-			if parent.is_border_contour(frame=frame): continue
+				# Skip if parent is a border contour
+				#if parent.is_border_contour(frame=frame): continue
 
-			# Append to list
-			nested_quadrilaterls.append((contour, parent))
+				# Append to list
+				nested_quadrilaterls.append((contour, parent))
+			
+			except KeyError: continue # parent was removed
 		
 		# Check if there is only one nested quadrilateral
 		if len(nested_quadrilaterls) == 0: return None, f'No nested squares found. ', {}
@@ -547,7 +583,7 @@ class MarkerDetector:
 		for contour in contours:
 
 			# Skip if border contour
-			if contour.is_border_contour(frame=frame): continue
+			#if contour.is_border_contour(frame=frame): continue
 
 			# Skip if is not a circle
 			if not contour.is_circle(): continue
@@ -582,9 +618,9 @@ class MarkerDetector:
 		frame_contours_orig  = frame_c.copy()
 		frame_contours_adj   = frame_c.copy()
 
-		contours = Contours(frame=frame)
-		contours.filter_by_area(min_area=self._min_area); time.sleep(1)
-
+		max_area = np.prod(frame.shape) // 2
+		contours = Contours(frame=frame, min_area=self._min_area, max_area=max_area)
+	
 		palette = generate_palette(n=len(contours))
 		contours.draw(frame=frame_contours_orig, colors=palette, thickness=10, adjusted=False)
 		contours.draw(frame=frame_contours_adj,  colors=palette, thickness=10, adjusted=True)
@@ -597,8 +633,15 @@ class MarkerDetector:
 		if marker_corners is None: return None, warn_message, views | empty_views | corner_views
 
 		inner_marker_contour, outer_marker_contour = marker_corners
-		inner_marker_vertices = inner_marker_contour.to_sorted_vertex()
-		outer_marker_vertices = outer_marker_contour.to_sorted_vertex()
+		
+		center   = np.concatenate([inner_marker_contour.contour, outer_marker_contour.contour], axis=0)
+		center2d = Point2D.from_tuple(np.mean(center, axis=0, dtype=np.int32)[0])
+		
+
+		inner_marker_vertices = inner_marker_contour.to_sorted_vertex(center=center2d)
+		outer_marker_vertices = outer_marker_contour.to_sorted_vertex(center=center2d)
+
+		inner_marker_vertices.align_to(other=outer_marker_vertices)
 
 		# 2. Detect circles
 		circle_detection, warning_message, anchor_views = self._detect_anchor(
@@ -642,6 +685,8 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 		)
 
 		self._marker_detector = marker_detector
+		self._success: int = -1
+		self._total  : int = -1
 
 	@property
 	def _str_name(self) -> str: return f'MarkerDetectionVideoStream'
@@ -666,18 +711,29 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 			exclude_views=exclude_views
 		)
 
-		if self._success == self._total:
-			info_msg = f'All frames were successfully processed. '
-		else:
-			info_msg = f'Processed {self._success} out of {self._total} frames. ({self._success / self._total:.2%}%) '
+		success, total = self.marker_detection_results
+
+		if success == total: info_msg = f'All frames were successfully processed. '
+		else:                info_msg = f'Processed {success} out of {total} frames. ({success / total:.2%}%) '
 		
 		self._logger.info(msg=info_msg)
+
+	@property
+	def marker_detection_results(self) -> Tuple[int, int]: 
+
+		if self._success == -1 or self._total == -1: raise ValueError(f'No results available. ')
+		
+		return self._success, self._total
 
 	def _process_marker(self, views: Views, marker: Marker) -> Views:
 
 		return {'marker': marker.draw(frame=views['calibrated'].copy())}
 
 	def _process_frame(self, frame: Frame, frame_id: int) -> Views:
+
+		debugging = self._is_debug(frame_id=frame_id)
+
+		if not debugging: self._total += 1
 	
 		views = super()._process_frame(frame=frame, frame_id=frame_id)
 
@@ -685,10 +741,11 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 		marker, warning, marker_views = self._marker_detector.detect(frame=views['binary'])
 
 		if marker is None:
-			if frame_id != -1: self._logger.warning(f'Unable to process frame {frame_id} - {warning}')
+			if not debugging: self._logger.warning(f'Unable to process frame {frame_id} - {warning}')
 			return views | marker_views | {'marker': views['calibrated']}
 		
 		# Process marker
+		if not debugging: self._success += 1
 		marker_processed_views = self._process_marker(views=views, marker=marker)
 		
 		return views | marker_views | marker_processed_views

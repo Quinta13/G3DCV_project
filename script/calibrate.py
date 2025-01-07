@@ -11,9 +11,9 @@ load_dotenv()
 DATA_DIR = os.getenv('DATA_DIR', '.')
 OUT_DIR  = os.getenv('OUT_DIR', '.')
 
-C_ID = 2
+CAMERA_ID = 2
 
-match C_ID:
+match CAMERA_ID:
 
     case 1:
 
@@ -29,7 +29,7 @@ match C_ID:
 
     case _:
 
-        raise ValueError(f'Invalid camera id {C_ID}. ')
+        raise ValueError(f'Invalid camera id {CAMERA_ID}. ')
 
 CALIBRATION_FILE = 'calibration'
 EXP_NAME         = 'coin1'
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     IOUtils.make_dir(path=CALIBRATION_DIR)
     logger = FileLogger(file=os.path.join(CALIBRATION_DIR, f'{CAMERA}_calibration.log'))
     logger.info(
-        msg=f'Saving synchronization data for experiment {EXP_NAME} '
+        msg=f'Saving calibration data for experiment {EXP_NAME} '
             f'of camera {CAMERA} to {CALIBRATION_DIR} . '
     )
     logger.info(msg=f'')

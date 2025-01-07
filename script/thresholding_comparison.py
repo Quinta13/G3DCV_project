@@ -23,9 +23,9 @@ load_dotenv()
 OUT_DIR  = os.getenv('OUT_DIR',  '.')
 
 EXP_NAME   = 'coin1'
-C_ID = 2
+CAMERA_ID  = 2
 
-match C_ID:
+match CAMERA_ID:
 
     case 1:
 
@@ -41,7 +41,7 @@ match C_ID:
 
     case _:
 
-        raise ValueError(f'Invalid camera id {C_ID}. ')
+        raise ValueError(f'Invalid camera id {CAMERA_ID}. ')
 
 CAMERA_EXT = 'mp4'
 VIDEO      = os.path.join(OUT_DIR, EXP_NAME, 'sync', f'{CAMERA}.{CAMERA_EXT}')
@@ -93,7 +93,7 @@ def main():
 
     # Output directory
     IOUtils.make_dir(path=OUT_DIR)
-    logger.info(msg=f'Saving synchronization data for experiment {EXP_NAME} to {COMPARISON_DIR} .')
+    logger.info(msg=f'Saving thresholding comparison data for experiment {EXP_NAME} to {COMPARISON_DIR} .')
     logger.info(msg=f'')
 
     # Read videos
@@ -101,6 +101,8 @@ def main():
 
     logger.info(msg='Using camera calibration data. ')
     calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration()
+    logger.info(msg=str(calibration))
+    logger.info(msg='')
 
     logger.info(msg='Creating video streams. ')
 
