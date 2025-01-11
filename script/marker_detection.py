@@ -7,7 +7,7 @@ from src.model.marker import MarkerDetectionVideoStream, MarkerDetector
 from src.model.thresholding import AdaptiveThresholding, OtsuThresholding, Thresholding, TopHatOtsuThresholding
 from src.model.calibration import CameraCalibration
 from src.utils.misc import Timer
-from src.utils.io_ import IOUtils, FileLogger
+from src.utils.io_ import IOUtils, FileLogger, VideoFile
 
 @dataclass
 class MarkerDetectionResult:
@@ -23,7 +23,7 @@ load_dotenv()
 DATA_DIR = os.getenv('DATA_DIR', '.')
 OUT_DIR  = os.getenv('OUT_DIR', '.')
 
-CAMERA_ID = 1
+CAMERA_ID = 2
 EXP_NAME = 'coin1'
 
 match CAMERA_ID:
@@ -71,9 +71,6 @@ if __name__ == "__main__":
     )
     logger.info(msg=f'')
 
-    # Camera calibration
-
-
     # Thresholding
     match THRESHOLDING:
 
@@ -94,7 +91,8 @@ if __name__ == "__main__":
     # Stream
     logger.info(msg='PREPARING MARKER DETECTION STREAM')
     logger.info(msg='Using camera calibration data. ')
-    calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration()
+    calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration(size=VideoFile(path=VIDEO).metadata.size)
+    # calibration.white_mask = True
     logger.info(msg=str(calibration))
     logger.info(msg='')
     

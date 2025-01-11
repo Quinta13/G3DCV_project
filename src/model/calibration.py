@@ -37,6 +37,8 @@ class CameraCalibration:
     ) -> 'CameraCalibration':
         ''' Calibrates the camera using object and image points. '''
 
+        WARN_THRESH = 1
+
         params_ : Dict = default(params, {})
 
         # Check if the number of object and image points are equal
@@ -57,7 +59,7 @@ class CameraCalibration:
         if not ret: logger.handle_error(msg="Camera calibration failed. ", exception=RuntimeError)
         else:
             logger.info(msg=f"Camera calibration completed in {timer} with calibration error: {ret} pixels.")
-            if ret > 1: logger.warning(msg="Calibration error is too high. Consider recalibrating the camera.")
+            if ret > WARN_THRESH: logger.warning(msg=f"Calibration error is too high (> {WARN_THRESH}). Consider recalibrating the camera.")
 
         return cls(
             camera_mat=camera_mat,
@@ -66,11 +68,18 @@ class CameraCalibration:
         )
     
     @classmethod
-    def trivial_calibration(cls) -> 'CameraCalibration':
+    def trivial_calibration(cls, size: Size2D) -> 'CameraCalibration':
         ''' Create a trivial camera calibration with no distortion. '''
 
+        w, h = size
+        max_ = max(*size)
+
         return cls(
-            camera_mat=np.eye(3),
+            camera_mat=np.array([
+                [max_,     0, w // 2],
+                [   0,  max_, h // 2],
+                [   0,     0,      1]
+            ]),
             distortion_coeffs=np.zeros((1, 5)),
             params={"reprojection_error": None}
         )

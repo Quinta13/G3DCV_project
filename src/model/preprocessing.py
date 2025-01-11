@@ -433,7 +433,7 @@ class ChessboardCameraCalibrator(VideoStream):
         else:
             
             frame_ = frame
-            if not self._is_debug(frame_id=frame_id): self._logger.warning(msg=f"Unable to find chessboard in frame {frame_id}")
+            if not self._is_debug(frame_id=frame_id): self._logger.warning(msg=f"[{self.name}] Unable to find chessboard in frame {frame_id}")
 
         return {'calibration': frame_} | super()._process_frame(frame=frame, frame_id=frame_id)
     

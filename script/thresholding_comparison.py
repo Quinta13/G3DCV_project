@@ -5,9 +5,9 @@ import cv2 as cv
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 
-from src.model.stream import SynchronizedVideoStream, VideoStream
+from src.model.stream import Stream, SynchronizedVideoStream, VideoStream
 from src.model.calibration import CalibratedVideoStream, CameraCalibration
-from src.utils.io_ import BaseLogger, IOUtils, FileLogger
+from src.utils.io_ import BaseLogger, IOUtils, FileLogger, VideoFile
 from src.utils.misc import Timer, grid_size
 from src.model.thresholding import (
     ThresholdedVideoStream,
@@ -100,13 +100,13 @@ def main():
     logger.info(msg=f'CREATING STREAMS')
 
     logger.info(msg='Using camera calibration data. ')
-    calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration()
+    calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration(size=VideoFile(path=VIDEO).metadata.size)
     logger.info(msg=str(calibration))
     logger.info(msg='')
 
     logger.info(msg='Creating video streams. ')
 
-    streams: List[VideoStream] = []
+    streams: List[Stream] = []
 
     for name, (C_threshold, args) in STREAMS_INFO.items():
 

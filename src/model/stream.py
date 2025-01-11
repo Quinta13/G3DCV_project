@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterator, List, Tuple, Iterable
 from collections import Counter
+from abc import ABC, abstractmethod
 
 import numpy as np
 import cv2 as cv
@@ -16,7 +17,64 @@ from src.utils.io_ import SilentLogger
 from src.utils.io_ import BaseLogger
 from src.model.typing import Views
 
-class VideoStream:
+class Stream(ABC):
+
+    def __init__(self, name: str, logger: BaseLogger = SilentLogger(), verbose: bool = False):
+
+        self._name           : str        = name
+        self._logger         : BaseLogger = logger
+        self._logger_verbose : BaseLogger = logger if verbose else SilentLogger()
+        self._is_verbose     : bool       = verbose
+    
+    @property
+    def name(self) -> str: return self._name
+
+    @name.setter
+    def name(self, value: str) -> None: self._name = value
+
+    def __str__(self)  -> str: return f'Stream[{self.name}; frames: {len(self)}]'
+    def __repr__(self) -> str: return str(self)
+
+    @abstractmethod
+    def __len__(self) -> int: pass
+
+    @abstractmethod
+    def iter_range(self, start: int, end: int, step: int = 1) -> Iterator[Tuple[int, Views]]: pass
+
+    @abstractmethod
+    def __getitem__(self, idx: int) -> Views: pass
+
+    @abstractmethod
+    def _default_window_size(self) -> Size2D: pass
+
+    @property
+    def delay(self) -> int: return 1
+
+    @property
+    def views(self) -> List[str]: return []
+    
+    def __iter__(self) -> Iterator[Tuple[int, Views]]: return self.iter_range(start=0, end=len(self), step=1)
+
+    def play(
+        self, 
+        start        : int                               = 0,
+        end          : int                        | None = None, 
+        skip_frames  : int                               = 1,
+        window_size  : Dict[str, Size2D] | Size2D | None = None,
+        exclude_views: List[str]                         = []
+    ):
+        ''' 
+        Stream the video from start to end frame. 
+        It is possible to resize the window by specifying the `window_size` parameter.
+        '''
+
+        window_size_ = {self.name: window_size} if window_size is not None else dict()
+        
+        single_sync_stream = SynchronizedVideoStream(streams=[self], logger=self._logger, verbose=self._is_verbose)
+        single_sync_stream.play(start=start, end=end, skip_frames=skip_frames, window_size=window_size_, exclude_views={self.name: exclude_views})
+
+
+class VideoStream(Stream):
 
     def __init__(
         self, 
@@ -25,11 +83,11 @@ class VideoStream:
         logger  : BaseLogger = SilentLogger(),
         verbose : bool       = False
     ):
+        
+        # File name, defaults to folder and file name
+        if name == '': name = PathUtils.get_folder_and_file(path=path)
 
-        # Logging
-        self._logger         : BaseLogger = logger
-        self._logger_verbose : BaseLogger = logger if verbose else SilentLogger()
-        self._is_verbose     : bool       = verbose
+        super().__init__(name=name, logger=logger, verbose=verbose)
         
         ISUtils.check_input    (path=path, logger=self._logger_verbose)
         ISUtils.check_extension(path=path, logger=self._logger_verbose, ext=VideoFile.VIDEO_EXT)
@@ -43,9 +101,6 @@ class VideoStream:
         if not self._video_capture.isOpened():
             self._logger.handle_error(msg=f"Failed to open video stream at {self.path}", exception=FileNotFoundError)
         
-        # File name, defaults to folder and file name
-        if name == '': name = PathUtils.get_folder_and_file(path=self.path)
-        self._name = name
     
     # --- PROPERTIES ---
 
@@ -53,24 +108,11 @@ class VideoStream:
     def path(self) -> str: return self._path
 
     @property
-    def name(self) -> str: return self._name
-
-    @name.setter
-    def name(self, value: str) -> None: self._name = value
-
-    @property
     def metadata(self) -> VideoFile.VideoMetadata: return self._metadata
-
-    @property
-    def views(self) -> List[str]: 
-
-        black_frame = np.zeros((*self.metadata.size, 3), dtype=np.uint8)
-        return list(self._process_frame(frame=black_frame, frame_id=-1).keys())
 
     @property
     def _str_name(self) -> str: return 'VideoStream'
 
-    
     @property
     def _str_params(self) -> Dict[str, Any]:
 
@@ -82,6 +124,15 @@ class VideoStream:
             'size'   : f'{w}x{h} pixels',
             'views'  : len(self.views)
         }
+    
+    @property
+    def delay(self) -> int: return int(1000 / self.metadata.fps)
+
+    @property
+    def _debug_frame(self) -> Frame: return np.zeros((*self.metadata.size, 3), dtype=np.uint8)
+
+    @property
+    def _default_window_size(self) -> Size2D: return self.metadata.size
 
     # --- MAGIC METHODS ---
     
@@ -91,9 +142,6 @@ class VideoStream:
 
     def __len__(self) -> int: return self.metadata.frames
     """ Return the number of frames in the video. """
-
-    def __iter__(self) -> Iterator[Views]: return self.iter_range(start=0, end=len(self), step=1)
-    """ Iterate over all frames in the video. """
         
     def __getitem__(self, idx: int) -> Views:
         """ Get a specific frame from the video. """
@@ -107,7 +155,7 @@ class VideoStream:
     
     # --- STREAMING ---
 
-    def iter_range(self, start: int, end: int, step: int = 1) -> Iterator[Views]:
+    def iter_range(self, start: int, end: int, step: int = 1) -> Iterator[Tuple[int, Views]]:
         """ Iterate over a specific range of frames in the video. """
         
         # Set the video position to the starting frame
@@ -131,30 +179,17 @@ class VideoStream:
             # Process the frame if required
             frame_ = self._process_frame(frame=frame, frame_id=frame_id)
 
+            yield frame_id, frame_
+
             frame_id += 1
 
-            yield frame_
-    
-    def play(
-        self, 
-        start        : int                               = 0,
-        end          : int                        | None = None, 
-        skip_frames  : int                               = 1,
-        window_size  : Dict[str, Size2D] | Size2D | None = None,
-        exclude_views: List[str]                         = []
-    ):
-        ''' 
-        Stream the video from start to end frame. 
-        It is possible to resize the window by specifying the `window_size` parameter.
-        '''
-
-        window_size_ = {self.name: window_size} if window_size is not None else dict()
-        
-        single_sync_stream = SynchronizedVideoStream(streams=[self], logger=self._logger, verbose=self._is_verbose)
-        single_sync_stream.play(start=start, end=end, skip_frames=skip_frames, window_size=window_size_, exclude_views={self.name: exclude_views})
 
     def _is_debug(self, frame_id: int) -> bool: return frame_id < 0
-    
+
+    @property
+    def views(self) -> List[str]:  
+        return list(self._process_frame(frame=self._debug_frame, frame_id=-1).keys())
+
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
         """
         Process a frame before displaying it.
@@ -169,7 +204,7 @@ class SynchronizedVideoStream:
     EXIT_KEY  = 'q'
     VIEW_KEYS = '1234567890abcdefghijklmnoprstuvwxyz'
 
-    def __init__(self, streams: List[VideoStream], logger: BaseLogger = SilentLogger(), verbose: bool = False):
+    def __init__(self, streams: List[Stream], logger: BaseLogger = SilentLogger(), verbose: bool = False):
         ''' Initialize a synchronized video stream object from multiple video streams. '''
 
         self._logger        : BaseLogger = logger
@@ -199,7 +234,7 @@ class SynchronizedVideoStream:
         self._num_frames: int = frames.pop()
 
         # Save streams indexed by name
-        self._streams: Dict[str, VideoStream] = {stream.name: stream for stream in streams}
+        self._streams: Dict[str, Stream] = {stream.name: stream for stream in streams}
     
     def __len__(self) -> int: return len(self._streams)
     
@@ -211,16 +246,18 @@ class SynchronizedVideoStream:
     def __repr__(self) -> str: return str(self)
 
     @property
-    def streams(self) -> List[VideoStream]: return list(self._streams.values())
+    def streams(self) -> List[Stream]: return list(self._streams.values())
 
     @property
     def stream_names(self) -> List[str]: return list(self._streams.keys())
 
     @property
-    def delay(self) -> int: return int(1000 / min(stream.metadata.fps for stream in self._streams.values()))
-
+    def delay(self) -> int: return min(stream.delay for stream in self._streams.values())
+    
     @property
     def num_frames(self) -> int: return self._num_frames
+
+    def _play_iter_progress(self, frames: Dict[str, Dict[str, Frame]], frame_id: int): pass
 
     def play(
         self,
@@ -249,7 +286,7 @@ class SynchronizedVideoStream:
 
             for stream_name, stream in self._streams.items():
 
-                default_size = self._streams[stream_name].metadata.size
+                default_size = self._streams[stream_name]._default_window_size
 
                 stream_views = window_size__.get(stream_name, default_size)
                 stream_views_ = stream_views if isinstance(stream_views, dict) else {view: stream_views for view in stream.views}
@@ -270,7 +307,7 @@ class SynchronizedVideoStream:
             }
 
         delay_ : int = default(delay, self.delay)
-        end_   : int   = default(end,   self._num_frames)
+        end_   : int = default(end,   self._num_frames)
         
         windows_size_ : Dict[str, Size2D] = parse_window_size(window_size)
         active_views  : Dict[str, bool]   = parse_active_views(exclude_views)
@@ -282,12 +319,6 @@ class SynchronizedVideoStream:
             key : view
             for key, view in zip(self.VIEW_KEYS[:len(windows_size_)], windows_size_.keys())
         }
-
-        # print('Debug')
-        # print(windows_size_)
-        # print(active_views)
-        # print(view_keys)
-        # return
 
         for stream_name, stream in self._streams.items():
 
@@ -315,21 +346,29 @@ class SynchronizedVideoStream:
             self._logger.info(msg=f'')
 
             # Playback loop
+
             while True:
 
                 # Read frames from all iterators
+                progress_stream = dict()
                 for stream, iterator in zip(self._streams.values(), iterators):
                     try:
-                        frame_views = next(iterator) # type: ignore
+                        progress_view = dict()
+                        frame_id, frame_views = next(iterator)
                         for view, frame in frame_views.items():
                             name = stream_view_name(stream=stream.name, view=view)
+                            progress_view[view] = frame
                             if active_views[name]:  cv.imshow(name, cv.cvtColor(frame, cv.COLOR_RGB2BGR))
+                        progress_stream[stream.name] = progress_view
                     except StopIteration:
                         # If any stream is finished, exit playback
                         cv.destroyAllWindows()
                         return
+                
+                # Process
+                self._play_iter_progress(frames=progress_stream, frame_id=frame_id)
 
-                key = chr(cv.waitKey(int(delay_)) & 0xFF)
+                key = chr(cv.waitKey(delay_) & 0xFF)
                 
                 if key == self.EXIT_KEY:
                     self._logger.info(msg="Exiting video playback.")

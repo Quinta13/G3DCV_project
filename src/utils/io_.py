@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 from scipy.io.wavfile import read as wav_read
 
 from src.utils.misc import Timer
+from src.model.typing import Size2D
 
 
 # _______________________________ LOGGER _______________________________
@@ -286,7 +287,7 @@ class VideoFile:
         frames       : int             # Number of video frames
         duration     : float           # Video duration in seconds
         fps          : float           # Video frame rate in frames per second
-        size         : Tuple[int, int] # Video frame size
+        size         : Size2D          # Video frame size
         _sample_rate : int | None      # Audio sample rate, if audio stream is present
 
         @classmethod
@@ -325,7 +326,7 @@ class VideoFile:
 
             # Audio stream
             audio_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
-            if not audio_stream: logger.warning(msg=f"No audio stream found in video {path}")
+            if not audio_stream: logger_verbose.warning(msg=f"No audio stream found in video {path}")
 
             # Metadata
             return cls(

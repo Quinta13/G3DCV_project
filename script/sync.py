@@ -12,8 +12,8 @@ load_dotenv()
 DATA_DIR = os.getenv('DATA_DIR', '.')
 OUT_DIR  = os.getenv('OUT_DIR',  '.')
 
-CAMERA_1, CAMERA_1_EXT, CAMERA_1_SIZE = 'cam1-static',       'mov', (324, 576)
-CAMERA_2, CAMERA_2_EXT, CAMERA_2_SIZE = 'cam2-moving_light', 'mp4', (576, 324)
+CAMERA_1, CAMERA_1_EXT, CAMERA_1_WINSIZE = 'cam1-static',       'mov', (324, 576)
+CAMERA_2, CAMERA_2_EXT, CAMERA_2_WINSIZE = 'cam2-moving_light', 'mp4', (576, 324)
 
 EXP_NAME     = 'coin1'
 
@@ -56,7 +56,7 @@ def main():
         streams=[stream1, stream2],
         logger=logger,
     )
-    sync_stream.play(window_size={stream1.name: CAMERA_1_SIZE, stream2.name: CAMERA_2_SIZE})
+    sync_stream.play(window_size={stream1.name: CAMERA_1_WINSIZE, stream2.name: CAMERA_2_WINSIZE})
     logger.info(msg=f'Streaming completed in {timer}. ')
     logger.info(msg='')
 

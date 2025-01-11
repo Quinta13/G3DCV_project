@@ -462,63 +462,92 @@ class Marker:
 	@property
 	def corners(self) -> Points2D: return [self.c0, self.c1, self.c2, self.c3]
 
-	@property
-	def corners_array(self) -> NDArray: return np.array([tuple(iter(corner)) for corner in self.corners], dtype=np.float32)
+	def get_world_points(self, scale: int = 1, homogeneous: bool = False) -> NDArray: 
 
-	def warp(self, frame: Frame, size: Size2D) -> Frame:
+		unscaled_points = np.array(
+			object=[
+				[0, 0], 
+				[0, 1], 
+				[1, 1], 
+				[1, 0]
+			],
+			dtype=np.float32
+		)
 
-		width, height = size
+		scaled_points = unscaled_points * scale
 
-		# Define the destination points
-		dst_points = np.array([
-			[        0,          0],
-			[width - 1,          0],
-			[width - 1, height - 1],
-			[        0, height - 1]
-		], dtype=np.float32)
+		if homogeneous: return np.hstack([scaled_points, np.ones((4, 1))])
+
+		return scaled_points
+
+	def to_corners_array(self, z : bool = False) -> NDArray: 
+		return np.array([
+			tuple(iter(corner))  + tuple([0] if z else [])
+			for corner in self.corners
+		], dtype=np.float32
+		)
+
+	def warp(self, frame: Frame, side: int) -> Frame:
 
 		# Compute the perspective transform matrix
-		transform_matrix = cv.getPerspectiveTransform(src=self.corners_array, dst=dst_points)
+		H, _ = cv.findHomography(srcPoints=self.to_corners_array(), dstPoints=self.get_world_points(scale=side))
 
 		# Apply the perspective transform
-		warped = cv.warpPerspective(src=frame, M=transform_matrix, dsize=(width, height))
+		warped = cv.warpPerspective(src=frame, M=H, dsize=(side, side))
 
 		return warped
 	
-	def camera_2d_position(self, calibration: CameraCalibration) -> LightDirection:
+	def camera_2d_position(self, calibration: CameraCalibration, scale: int = 1):
 
-		WORD_POINTS = np.array([
-			[0, 0], [1, 0], [1, 1], [0, 1]
-		], dtype=np.float32)
+		# Marker corner pixels in the image plane c0, c1, c2, c3
+		pixel_points = self.to_corners_array()
 
-		# Compute homography matrix H
-		H, _ = cv.findHomography(srcPoints=self.corners_array, dstPoints=WORD_POINTS)
+		# World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])
+		world_points = self.get_world_points(scale=scale, homogeneous=False)
 
-		# Normalize the homography using the intrinsic matrix
-		H_normalized = np.linalg.inv(calibration.camera_mat) @ H
+		# Homography and Calibration matrix
+		#H, _ = cv.findHomography(srcPoints=pixel_points, dstPoints=world_points)
+		H, _ = cv.findHomography(srcPoints=world_points, dstPoints=pixel_points)
+		K = calibration.camera_mat
 
-		# Extract columns of H'
-		h1, h2, h3 = H_normalized.T
+		# Step 1: Compute Q = K^-1 * H
+		RT = np.linalg.inv(K) @ H
 
-		# Compute scale factor
-		scale = 2 / (np.linalg.norm(h1) + np.linalg.norm(h2))
+		# Step 2: Extract r1, r2, t
+		r1, r2, t = RT.T
 
-		# Compute rotation and translation
-		r1 = scale * h1
-		r2 = scale * h2
-		r3 = np.cross(r1, r2)  # Ensure orthogonality # type: ignore
-		t = scale * h3
+		# Step 3: Compute scaling factor alpha = 2 / (||r1|| + ||r2||)
+		alpha = 2 / (np.linalg.norm(r1) + np.linalg.norm(r2))
 
-		# Construct the rotation matrix
-		R = np.stack((r1, r2, r3), axis=1)
+		# Step 4: Scale r1, r2, t
+		RT_norm = RT / alpha
+		r1_norm, r2_norm, t_norm = RT_norm.T
 
-		# Ensure R is a valid rotation matrix using SVD
-		U, _, Vt = np.linalg.svd(R)  # type: ignore
-		R = U @ Vt
+		# Step 5: Compute r3 = r1 x r2
+		r3_norm = np.cross(r1_norm, r2_norm)
 
-		x, y, _ = t
+		# Step 6: Construct rotation matrix, with no guarantee of orthogonality
+		Q = np.column_stack((r1_norm, r2_norm, r3_norm))
 
-		return x, y
+		# Step 7: Orthonormalize using SVD
+		U, _, Vt = np.linalg.svd(Q)  # Q = U * S * V^t
+		R = U @ Vt                   # R = U * V^t
+
+		assert np.allclose(R @ R.T, np.eye(3)), 'R is not orthonormal'
+
+		# Compute camera pose
+		pose = - R.T @ t_norm
+
+		# Normalize pose
+		pose_norm = pose / np.linalg.norm(pose)
+
+		u, v, w = pose_norm
+
+		assert w > 0, 'The camera is not pointing towards the marker'
+
+		# Step 6: Return rotation matrix and translation vector
+		return u, v
+
 
 	def draw(self, frame: Frame) -> Frame:
 
@@ -537,24 +566,27 @@ class MarkerDetector:
 
 	def __init__(
 		self, 
-		white_thresh: int = 255 - 25,
-		black_thresh: int =   0 + 25,
-		min_area    : int = 200,
+		white_thresh  : int = 255 - 25,
+		black_thresh  : int =   0 + 25,
+		min_area      : int = 200,
+		max_area_prop : float = 0.5
 	):
 
-		self._white_thresh = white_thresh
-		self._black_thresh = black_thresh
-		self._min_area     = min_area
+		self._white_thresh  = white_thresh
+		self._black_thresh  = black_thresh
+		self._min_area      = min_area
+		self._max_area_prop = max_area_prop
 	
 	def __str__(self) -> str: return f'MarkerDetector[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
 	
 	def __repr__(self) -> str: return str(self)
 
 	@property
-	def params(self) -> Dict[str, int]: return {
-		'white_thresh': self._white_thresh,
-		'black_thresh': self._black_thresh,
-		'min_area'    : self._min_area
+	def params(self) -> Dict[str, int | float]: return {
+		'white_thresh'  : self._white_thresh,
+		'black_thresh'  : self._black_thresh,
+		'min_area'      : self._min_area,
+		'max_area_prop' : self._max_area_prop
 	}
 	
 	def _detect_corners(self, frame: Frame, contours: Contours) -> Tuple[Tuple[Contour, Contour] | None, str, Views]:
@@ -676,7 +708,7 @@ class MarkerDetector:
 		frame_contours_orig  = frame_c.copy()
 		frame_contours_adj   = frame_c.copy()
 
-		max_area = np.prod(frame.shape) // 2
+		max_area = np.prod(frame.shape) * self._max_area_prop
 		contours = Contours(frame=frame, min_area=self._min_area, max_area=max_area)
 	
 		palette = generate_palette(n=len(contours))
@@ -783,7 +815,7 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 		
 		return self._success, self._total
 
-	def _process_marker(self, views: Views, marker: Marker) -> Views:
+	def _process_marker(self, views: Views, marker: Marker, frame_id: int) -> Views:
 
 		return {'marker': marker.draw(frame=views['calibrated'].copy())}
 
@@ -799,11 +831,11 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 		marker, warning, marker_views = self._marker_detector.detect(frame=views['binary'])
 
 		if marker is None:
-			if not debugging: self._logger.warning(f'Unable to process frame {frame_id} - {warning}')
+			if not debugging: self._logger.warning(f'[{self.name}] Unable to process frame {frame_id} - {warning}')
 			return views | marker_views | {'marker': views['calibrated']}
 		
 		# Process marker
 		if not debugging: self._success += 1
-		marker_processed_views = self._process_marker(views=views, marker=marker)
+		marker_processed_views = self._process_marker(views=views, marker=marker, frame_id=frame_id)
 		
 		return views | marker_views | marker_processed_views
