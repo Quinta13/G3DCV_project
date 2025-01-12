@@ -69,10 +69,11 @@ if __name__ == "__main__":
     logger.info(msg='PERFORMING CAMERA CALIBRATION')
     camera_calibration = calibrator.calibrate(window_size=WINDOW_SIZE)
     logger.info(msg='')
+    logger.info(msg=str(camera_calibration))
+    logger.info(msg='')
 
     # Saving results
     logger.info(msg='SAVING CAMERA CALIBRATION')
-    logger.info(msg=str(camera_calibration))
     camera_calibration.dump(path=CALIBRATION_FILE, logger=logger)
     logger.info(msg='')
 

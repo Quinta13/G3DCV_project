@@ -12,7 +12,7 @@ import cv2 as cv
 
 
 from src.model.typing import Size2D
-from src.model.calibration import CameraCalibration
+from src.model.calibration import CalibratedCamera
 from src.model.stream import VideoStream
 from src.utils.io_ import (
     PathUtils, AudioFile, VideoFile
@@ -62,7 +62,7 @@ class VideoSync:
     # --- MAGIC METHODS ---
 
     def __str__(self) -> str:
-        return f"VideoSync[{self.exp_name}]"
+        return f"{self.__class__.__name__}[{self.exp_name}]"
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -387,12 +387,12 @@ class ChessboardCameraCalibrator(VideoStream):
 
         h, w = self.chessboard_size
 
-        return f"CameraCalibration[{self.name}; "\
+        return f"{self.__class__.__name__}[{self.name}; "\
             f"chessboard size={h}x{w}; "\
             f"samples={self.samples}; "\
             f"skip frames={self.skip_frames}) "\
     
-    def calibrate(self, window_size: Dict[str, Size2D] | Size2D | None = None) -> CameraCalibration:
+    def calibrate(self, window_size: Dict[str, Size2D] | Size2D | None = None) -> CalibratedCamera:
         ''' Calibrate the camera using the collected image points. '''
 
         self._reset_img_points()
@@ -408,7 +408,7 @@ class ChessboardCameraCalibrator(VideoStream):
         object_points = [object_point] * len(self._img_points)
 
         # Calibrate the camera
-        return CameraCalibration.from_points(
+        return CalibratedCamera.from_points(
             obj_points=object_points,
             img_points=self._img_points,
             size=self.metadata.size,

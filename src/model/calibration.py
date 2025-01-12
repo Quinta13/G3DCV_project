@@ -18,7 +18,7 @@ from src.model.typing import Views
 
 
 @dataclass
-class CameraCalibration:
+class CalibratedCamera:
     ''' Dataclass to store camera calibration coefficients. '''
 
     camera_mat       : NDArray        # 3x3 Intrinsic Camera Matrix
@@ -34,7 +34,7 @@ class CameraCalibration:
         size      : Size2D,
         params    : Dict[str, Any] | None = None,
         logger    : BaseLogger            = SilentLogger()
-    ) -> 'CameraCalibration':
+    ) -> 'CalibratedCamera':
         ''' Calibrates the camera using object and image points. '''
 
         WARN_THRESH = 1
@@ -68,7 +68,7 @@ class CameraCalibration:
         )
     
     @classmethod
-    def trivial_calibration(cls, size: Size2D) -> 'CameraCalibration':
+    def trivial_calibration(cls, size: Size2D) -> 'CalibratedCamera':
         ''' Create a trivial camera calibration with no distortion. '''
 
         w, h = size
@@ -87,7 +87,7 @@ class CameraCalibration:
         
 
     @classmethod
-    def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'CameraCalibration':
+    def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'CalibratedCamera':
         ''' Load camera calibration from a pickle file. '''
 
         logger.info(msg=f"Loading camera calibration from {path}")
@@ -158,7 +158,7 @@ class CalibratedVideoStream(VideoStream):
     def __init__(
         self, 
         path        : str, 
-        calibration : CameraCalibration, 
+        calibration : CalibratedCamera, 
         name        : str        = '',
         logger      : BaseLogger = SilentLogger(), 
         verbose     : bool       = False,
@@ -166,7 +166,7 @@ class CalibratedVideoStream(VideoStream):
 
         super().__init__(path=path, name=name, logger=logger, verbose=verbose)
 
-        self._calibration: CameraCalibration = calibration
+        self._calibration: CalibratedCamera = calibration
 
     @property
     def _str_name(self) -> str: return 'CalibratedVideoStream'
@@ -176,6 +176,6 @@ class CalibratedVideoStream(VideoStream):
         views = super()._process_frame(frame=frame, frame_id=frame_id)
 
         # Undistort the frame
-        frame_calibrated = self._calibration.undistort(views['raw'].copy())
+        frame_undistorted = self._calibration.undistort(views['raw'].copy())
 
-        return views | {'calibrated': frame_calibrated}
+        return views | {'undistorted': frame_undistorted}

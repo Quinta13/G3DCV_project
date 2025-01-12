@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 
 from src.model.stream import Stream, SynchronizedVideoStream, VideoStream
-from src.model.calibration import CalibratedVideoStream, CameraCalibration
+from src.model.calibration import CalibratedVideoStream, CalibratedCamera
 from src.utils.io_ import BaseLogger, IOUtils, FileLogger, VideoFile
 from src.utils.misc import Timer, grid_size
 from src.model.thresholding import (
@@ -100,7 +100,7 @@ def main():
     logger.info(msg=f'CREATING STREAMS')
 
     logger.info(msg='Using camera calibration data. ')
-    calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration(size=VideoFile(path=VIDEO).metadata.size)
+    calibration = CalibratedCamera.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CalibratedCamera.trivial_calibration(size=VideoFile(path=VIDEO).metadata.size)
     logger.info(msg=str(calibration))
     logger.info(msg='')
 
@@ -136,7 +136,7 @@ def main():
     exclude_views = {
         stream.name: [
             view_name for view_name in stream.views
-            if not (view_name == 'binary' or (stream.name=='reference' and view_name=='calibrated'))
+            if not (view_name == 'binary' or (stream.name=='reference' and view_name=='undistorted'))
         ]
         for stream in streams
     }

@@ -32,7 +32,7 @@ class Stream(ABC):
     @name.setter
     def name(self, value: str) -> None: self._name = value
 
-    def __str__(self)  -> str: return f'Stream[{self.name}; frames: {len(self)}]'
+    def __str__(self)  -> str: return f'[{self.name}; frames: {len(self)}]'
     def __repr__(self) -> str: return str(self)
 
     @abstractmethod
@@ -61,17 +61,20 @@ class Stream(ABC):
         end          : int                        | None = None, 
         skip_frames  : int                               = 1,
         window_size  : Dict[str, Size2D] | Size2D | None = None,
-        exclude_views: List[str]                         = []
+        exclude_views: List[str]                         = [],
+        delay        : int                        | None = None
     ):
         ''' 
         Stream the video from start to end frame. 
         It is possible to resize the window by specifying the `window_size` parameter.
         '''
 
+        delay_ = default(delay, self.delay)
+
         window_size_ = {self.name: window_size} if window_size is not None else dict()
         
         single_sync_stream = SynchronizedVideoStream(streams=[self], logger=self._logger, verbose=self._is_verbose)
-        single_sync_stream.play(start=start, end=end, skip_frames=skip_frames, window_size=window_size_, exclude_views={self.name: exclude_views})
+        single_sync_stream.play(start=start, end=end, skip_frames=skip_frames, window_size=window_size_, exclude_views={self.name: exclude_views}, delay=delay_)
 
 
 class VideoStream(Stream):

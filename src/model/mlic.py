@@ -11,7 +11,7 @@ import cv2 as cv
 from src.utils.io_ import InputSanitizationUtils as ISUtils, PathUtils
 from src.model.typing import LightDirection
 from src.model.stream import Stream, SynchronizedVideoStream
-from src.model.calibration import CameraCalibration
+from src.model.calibration import CalibratedCamera
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
 from src.model.thresholding import Thresholding
 from src.model.typing import Frame, Size2D, Views, Pixel
@@ -24,7 +24,7 @@ class MLIC:
 
         u_mean, v_mean = uv_means
 
-        n_obj, *obj_shape = object_frames   .shape
+        n_obj, *obj_size = object_frames   .shape
         n_ld,  *ld_shape  = light_directions.shape
 
         if n_obj != n_ld:
@@ -39,17 +39,17 @@ class MLIC:
         if not np.all((-1 <= light_directions) & (light_directions <= 1)): 
             raise ValueError("Light source values must be in the range [-1, 1]")
 
-        if not (u_mean.shape == v_mean.shape == tuple(obj_shape)):
-            raise ValueError(f"Frame shape and UV means shape must be equal, got {obj_shape} (frame shape) {u_mean.shape} (U-mean), {v_mean.shape} (V-mean). ")
+        if not (u_mean.shape == v_mean.shape == tuple(obj_size)):
+            raise ValueError(f"Frame shape and UV means shape must be equal, got {obj_size} (frame shape) {u_mean.shape} (U-mean), {v_mean.shape} (V-mean). ")
         
-        if not (len(obj_shape) == 2):
-            raise ValueError(f"Frame shape must be bidimensional, got {obj_shape}. ")
+        if not (len(obj_size) == 2):
+            raise ValueError(f"Frame shape must be bidimensional, got {obj_size}. ")
         
         for name, array in zip(['frame', 'U mean', 'V mean'], [object_frames[1:], u_mean, v_mean]):
             if not np.all((0 <= array) & (array <= 255)): raise ValueError(f"{name} values must be in the range [0, 255]")
         
         self._n_frames         : int                     = n_obj
-        self._shape            : Size2D                  = tuple(obj_shape)
+        self._size             : Size2D                  = tuple(obj_size)
         self._obj_frames       : NDArray                 = object_frames
         self._light_directions : NDArray                 = light_directions
         self._uv_means         : Tuple[NDArray, NDArray] = uv_means
@@ -62,7 +62,7 @@ class MLIC:
 
         with open(path, 'rb') as f: return pickle.load(f)
 
-    def __str__(self)  -> str: return f"MLIC[shape: {'x'.join([str(s) for s in self._shape])}; items: {self._n_frames}]"
+    def __str__(self)  -> str: return f"{self.__class__.__name__}[shape: {'x'.join([str(s) for s in self._size])}; items: {self._n_frames}]"
     def __repr__(self) -> str: return str(self)
     def __len__(self)  -> int: return self._n_frames
 
@@ -78,8 +78,8 @@ class MLIC:
 
     def add_uv_channels(self, y_frame: Frame) -> Frame:
 
-        if y_frame.shape != self._shape:
-            raise ValueError(f"Frame shape must be equal to the MLIC shape of {self.shape}, got {y_frame.shape} (frame). ")
+        if y_frame.shape != self._size:
+            raise ValueError(f"Frame shape must be equal to the MLIC shape of {self.size}, got {y_frame.shape} (frame). ")
 
         yuv_frame = np.stack([y_frame, *self._uv_means], axis=-1, dtype=np.uint8)
         rgb_frame = cv.cvtColor(yuv_frame, cv.COLOR_YUV2RGB)
@@ -89,9 +89,9 @@ class MLIC:
     def get_pixel_values(self, pixel: Pixel) -> NDArray:
 
         px, py = pixel
-        w, h = self.shape
+        w, h = self.size
 
-        if not (0 <= px < w and 0 <= py < h): raise ValueError(f"Pixel coordinates must be within the frame shape {self.shape}, got {pixel}. ")
+        if not (0 <= px < w and 0 <= py < h): raise ValueError(f"Pixel coordinates must be within the frame shape {self.size}, got {pixel}. ")
 
         return self._obj_frames[:, px, py]
 
@@ -106,7 +106,7 @@ class MLIC:
         }
 
     @property
-    def shape(self) -> Size2D: return self._shape
+    def size(self) -> Size2D: return self._size
 
     def to_stream(
         self, name: str = 'mlic',
@@ -159,7 +159,7 @@ class MLICStream(Stream):
     def __getitem__(self, idx: int) -> Views: return self._mlic.get_views(index=idx)
 
     @property
-    def _default_window_size(self) -> Size2D: return self._mlic.shape
+    def _default_window_size(self) -> Size2D: return self._mlic.size
 
     @property
     def views(self) -> List[str]: return list(self[0].keys()) # NOTE: at least one frame is guaranteed
@@ -176,7 +176,7 @@ class MLICAccumulator:
         self._object_frames_succ   : int = 0
         self._light_directions_succ: int = 0
 
-    def __str__ (self) -> str: return f"MLICAccumulator[items: {len(self)}]"
+    def __str__ (self) -> str: return f"{self.__class__.__name__}[items: {len(self)}]"
     def __repr__(self) -> str: return str(self)
     def __len__ (self) -> int: return len(self._object_frames)
 
@@ -221,7 +221,7 @@ class MLICStaticCameraVideoStream(MarkerDetectionVideoStream):
     def __init__(
         self, 
         path            : str, 
-        calibration     : CameraCalibration,
+        calibration     : CalibratedCamera,
         thresholding    : Thresholding,
 		marker_detector : MarkerDetector,
         mlic_side       : int,
@@ -243,7 +243,7 @@ class MLICStaticCameraVideoStream(MarkerDetectionVideoStream):
         self._mlic_side            : int = mlic_side
         self._last_processed_frame : int = -1
 
-    def __str__(self)  -> str: return f"MLICStaticCameraVideoStream[{self.name}, frames: {len(self)}]"
+    def __str__(self)  -> str: return f"{self.__class__.__name__}[{self.name}, frames: {len(self)}]"
     def __repr__(self) -> str: return str(self)
 
     @property
@@ -255,7 +255,7 @@ class MLICStaticCameraVideoStream(MarkerDetectionVideoStream):
 
         super_views = super()._process_marker(views=views, marker=marker, frame_id=frame_id)
 
-        warped = marker.warp(frame=views['calibrated'].copy(), side=self._mlic_side)
+        warped = marker.warp(frame=views['undistorted'].copy(), side=self._mlic_side)
 
         # Flip vertically the warped image to make 0,0 the top-left corner
         warped = cv.flip(warped, flipCode=0)
@@ -273,7 +273,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
     def __init__(
         self, 
         path            : str, 
-        calibration     : CameraCalibration,
+        calibration     : CalibratedCamera,
         thresholding    : Thresholding,
         marker_detector : MarkerDetector,
         name            : str        = '',
@@ -293,7 +293,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
 
         self._last_processed_frame: int = -1
 
-    def __str__(self)  -> str: return f"MLICDynamicCameraVideoStream[{self.name}, frames: {len(self)}]"
+    def __str__(self)  -> str: return f"{self.__class__.__name__}[{self.name}, frames: {len(self)}]"
     def __repr__(self) -> str: return str(self)
 
     @property

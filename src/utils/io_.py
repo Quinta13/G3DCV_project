@@ -246,7 +246,7 @@ class AudioFile:
 
     def __str__(self) -> str:
 
-        return f"Audio[{self.name}; "\
+        return f"{self.__class__.__name__}[{self.name}; "\
             f"duration: {int  (self.duration)} sec; "\
             f"sampling rate: {round(self.rate, 2 )} Hz]"
 
@@ -343,7 +343,7 @@ class VideoFile:
 
         def __str__(self) -> str:
 
-            return f"Metadata[ext: {self.ext}; "\
+            return f"{self.__class__.__name__}[ext: {self.ext}; "\
                 f"{self.frames     } frames; "\
                 f"{self.duration   } seconds; "\
                 f"{self.fps } fps; "\
@@ -397,7 +397,7 @@ class VideoFile:
 
         w, h = self.metadata.size
         
-        return f"Video[{self.name}; "\
+        return f"{self.__class__.__name__}[{self.name}; "\
             f"duration: {int  (self.metadata.duration     )} sec; "\
             f"size: {w}x{h} pixels; "\
             f"frame rate: {round(self.metadata.fps, 2)} fps]"

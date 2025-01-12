@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from src.model.marker import MarkerDetectionVideoStream, MarkerDetector
 from src.model.thresholding import AdaptiveThresholding, OtsuThresholding, Thresholding, TopHatOtsuThresholding
-from src.model.calibration import CameraCalibration
+from src.model.calibration import CalibratedCamera
 from src.utils.misc import Timer
 from src.utils.io_ import IOUtils, FileLogger, VideoFile
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     # Stream
     logger.info(msg='PREPARING MARKER DETECTION STREAM')
     logger.info(msg='Using camera calibration data. ')
-    calibration = CameraCalibration.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CameraCalibration.trivial_calibration(size=VideoFile(path=VIDEO).metadata.size)
+    calibration = CalibratedCamera.from_pickle(path=CALIBRATION, logger=logger) if CALIBRATION else CalibratedCamera.trivial_calibration(size=VideoFile(path=VIDEO).metadata.size)
     # calibration.white_mask = True
     logger.info(msg=str(calibration))
     logger.info(msg='')

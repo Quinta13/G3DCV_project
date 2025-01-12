@@ -3,7 +3,7 @@ from typing import Any, Dict
 import cv2 as cv
 from cv2.typing import Size
 
-from src.model.calibration import CalibratedVideoStream, CameraCalibration
+from src.model.calibration import CalibratedVideoStream, CalibratedCamera
 from src.utils.io_ import SilentLogger
 from src.model.typing import Frame, Views
 from src.utils.io_ import BaseLogger
@@ -20,11 +20,11 @@ class Thresholding(ABC):
 
         return {'grayscale': frame_g}
     
-    def __str__(self)  -> str: return f'{self.name}[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
+    def __str__ (self) -> str: return f'{self.name}[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
     def __repr__(self) -> str: return str(self)
     
     @property
-    def name(self) -> str: return 'Thresholding'
+    def name(self) -> str: return self.__class__.__name__
 
     @property
     def params(self) -> Dict[str, Any]: return {}
@@ -34,9 +34,6 @@ class BaseThresholding(Thresholding):
     def __init__(self, t: int, kernel_size: Size | None = None):
         self._t = t
         self._kernel_size = kernel_size
-
-    @property
-    def name(self) -> str: return 'BaseThresholding'
 
     @property
     def params(self) -> Dict[str, Any]: 
@@ -70,9 +67,6 @@ class OtsuThresholding(Thresholding):
 
     def __init__(self, kernel_size: Size | None = None):
         self._kernel_size = kernel_size
-
-    @property
-    def name(self) -> str: return 'OtsuThresholding'
 
     @property
     def params(self) -> Dict[str, Any]:
@@ -110,9 +104,6 @@ class TopHatOtsuThresholding(Thresholding):
         self._kernel_shape = kernel_shape
 
     @property
-    def name(self) -> str: return 'TopHatOtsuThresholding'
-
-    @property
     def params(self) -> Dict[str, Any]: return {'top hat kernel size': f'{self._kernel_size[0]}x{self._kernel_size[1]}'}
 
     def __call__(self, frame: Frame) -> Views:
@@ -134,9 +125,6 @@ class AdaptiveThresholding(Thresholding):
     def __init__(self, block_size: int, c: int):
         self._block_size = block_size
         self._c = c
-
-    @property
-    def name(self) -> str: return 'AdaptiveThresholding'
 
     @property
     def params(self) -> Dict[str, Any]: return {'block size': self._block_size, 'c': self._c}
@@ -166,9 +154,6 @@ class AdaptiveThresholdingPlusClosing(AdaptiveThresholding):
         self._kernel_shape = kernel_shape
 
     @property
-    def name(self) -> str: return 'AdaptiveThresholdingPlusClosing'
-
-    @property
     def params(self) -> Dict[str, Any]: return super().params | {'closing kernel size': f'{self._kernel_size[0]}x{self._kernel_size[1]}'}
 
     def __call__(self, frame: Frame) -> Views:
@@ -189,7 +174,7 @@ class ThresholdedVideoStream(CalibratedVideoStream):
     def __init__(
         self, 
         path        : str, 
-        calibration : CameraCalibration,
+        calibration : CalibratedCamera,
         thresholding: Thresholding,
         name        : str        = '',
         logger      : BaseLogger = SilentLogger(),
@@ -209,7 +194,7 @@ class ThresholdedVideoStream(CalibratedVideoStream):
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
 
         views = super()._process_frame(frame=frame, frame_id=frame_id)
-        calibrated_frame = views['calibrated']
+        calibrated_frame = views['undistorted']
         thresh_views = self._thresholding(frame=calibrated_frame)
 
         return views | thresh_views

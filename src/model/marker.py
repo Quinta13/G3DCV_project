@@ -9,7 +9,7 @@ import numpy as np
 import cv2 as cv
 from numpy.typing import NDArray
 
-from src.model.calibration import CameraCalibration
+from src.model.calibration import CalibratedCamera
 from src.model.thresholding import ThresholdedVideoStream, Thresholding
 from src.model.typing import Frame, RGBColor, Views, Size2D, LightDirection
 from src.utils.misc   import default, generate_palette
@@ -23,7 +23,7 @@ class Point2D:
 	x: int
 	y: int
 
-	def __str__(self)  -> str: return f'Point2D({self.x}, {self.y})'
+	def __str__(self)  -> str: return f'{self.__class__.__name__}({self.x}, {self.y})'
 	def __repr__(self) -> str: return str(self)
 	def __iter__(self) -> Iterator[int]: return iter([self.x, self.y])
 
@@ -116,7 +116,7 @@ class SortedVertices:
 
 		return vertices[sorted_indices]
 
-	def __str__    (self) -> str: return f'SortedVertices[points={len(self)}]'
+	def __str__    (self) -> str: return f'{self.__class__.__name__}[points={len(self)}]'
 	def __repr__   (self) -> str: return str(self)
 	def __len__    (self) -> int: return len(self._vertices)
 
@@ -161,7 +161,7 @@ class Contour:
 		first_child : int | None
 		parent      : int | None
 
-		def __str__ (self) -> str: return f'ContourHierarchy[{"; ".join([f"{k}: {v}" for k, v in self.to_dict().items()])}]'
+		def __str__ (self) -> str: return f'{self.__class__.__name__}[{"; ".join([f"{k}: {v}" for k, v in self.to_dict().items()])}]'
 		
 		def __repr__(self) -> str: return str(self)
 		
@@ -202,7 +202,7 @@ class Contour:
 		epsilon = cv.arcLength(contour, closed=True) * Contour._APPROX_FACTOR
 		self._contour_approx: NDArray= cv.approxPolyDP(curve=contour, closed=True, epsilon=epsilon)
 
-	def __str__ (self) -> str: return f'Contour(id={self.id}, points={len(self)})'
+	def __str__ (self) -> str: return f'{self.__class__.__name__}(id={self.id}, points={len(self)})'
 	def __repr__(self) -> str: return str(self)
 	def __len__ (self) -> int: return len(self.contour)
 	
@@ -342,7 +342,7 @@ class Contours:
 
 		# }
 
-	def __str__     (self)           -> str              : return f'Contours[curvers: {len(self)}]'
+	def __str__     (self)           -> str              : return f'{self.__class__.__name__}[curvers: {len(self)}]'
 	def __repr__    (self)           -> str              : return str(self)
 	def __len__     (self)           -> int              : return len(self._contours_dict)
 	def __iter__    (self)           -> Iterator[Contour]: return iter(self._contours_dict.values())
@@ -434,7 +434,7 @@ class Marker:
 	
 	def __str__(self) -> str:
 		corners_str = '; '.join([f'c{i}={corner}' for i, corner in enumerate(self.corners)])
-		return f'Marker[{corners_str}; anchor={self.anchor})'
+		return f'{self.__class__.__name__}[{corners_str}; anchor={self.anchor})'
 	
 	def __repr__(self) -> str: return str(self)
 
@@ -497,7 +497,7 @@ class Marker:
 
 		return warped
 	
-	def camera_2d_position(self, calibration: CameraCalibration, scale: int = 1):
+	def camera_2d_position(self, calibration: CalibratedCamera, scale: int = 1):
 
 		# Marker corner pixels in the image plane c0, c1, c2, c3
 		pixel_points = self.to_corners_array()
@@ -577,7 +577,7 @@ class MarkerDetector:
 		self._min_area      = min_area
 		self._max_area_prop = max_area_prop
 	
-	def __str__(self) -> str: return f'MarkerDetector[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
+	def __str__(self) -> str: return f'{self.__class__.__name__}[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
 	
 	def __repr__(self) -> str: return str(self)
 
@@ -757,7 +757,7 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 	def __init__(
         self, 
         path            : str, 
-        calibration     : CameraCalibration,
+        calibration     : CalibratedCamera,
         thresholding    : Thresholding,
 		marker_detector : MarkerDetector,
         name            : str        = '',
@@ -817,7 +817,7 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 
 	def _process_marker(self, views: Views, marker: Marker, frame_id: int) -> Views:
 
-		return {'marker': marker.draw(frame=views['calibrated'].copy())}
+		return {'marker': marker.draw(frame=views['undistorted'].copy())}
 
 	def _process_frame(self, frame: Frame, frame_id: int) -> Views:
 
@@ -832,7 +832,7 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 
 		if marker is None:
 			if not debugging: self._logger.warning(f'[{self.name}] Unable to process frame {frame_id} - {warning}')
-			return views | marker_views | {'marker': views['calibrated']}
+			return views | marker_views | {'marker': views['undistorted']}
 		
 		# Process marker
 		if not debugging: self._success += 1

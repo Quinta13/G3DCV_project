@@ -8,7 +8,7 @@ from src.model.marker import MarkerDetector
 from src.model.mlic import MLICDynamicCameraVideoStream, MLICStaticCameraVideoStream, MLICCollector
 from src.model.thresholding import AdaptiveThresholding, BaseThresholding, OtsuThresholding, Thresholding, TopHatOtsuThresholding
 from src.utils.io_ import FileLogger, IOUtils, VideoFile
-from src.model.calibration import CameraCalibration
+from src.model.calibration import CalibratedCamera
 from src.utils.misc import Timer
 
 load_dotenv()
@@ -31,8 +31,8 @@ CAMERA_EXT = 'mp4'
 VIDEO_1 = os.path.join(OUT_DIR, EXP_NAME, 'sync', f'{CAMERA_1}.{CAMERA_EXT}')
 VIDEO_2 = os.path.join(OUT_DIR, EXP_NAME, 'sync', f'{CAMERA_2}.{CAMERA_EXT}')
 
-C_1 = CameraCalibration.from_pickle(CALIBRATION_1) if CALIBRATION_1 else CameraCalibration.trivial_calibration(size=VideoFile(VIDEO_1).metadata.size)
-C_2 = CameraCalibration.from_pickle(CALIBRATION_2) if CALIBRATION_2 else CameraCalibration.trivial_calibration(size=VideoFile(VIDEO_2).metadata.size)
+C_1 = CalibratedCamera.from_pickle(CALIBRATION_1) if CALIBRATION_1 else CalibratedCamera.trivial_calibration(size=VideoFile(VIDEO_1).metadata.size)
+C_2 = CalibratedCamera.from_pickle(CALIBRATION_2) if CALIBRATION_2 else CalibratedCamera.trivial_calibration(size=VideoFile(VIDEO_2).metadata.size)
 
 def get_binary_thresholding(type_: str) -> Thresholding:
 
@@ -45,7 +45,7 @@ def get_binary_thresholding(type_: str) -> Thresholding:
 		case _           : raise ValueError(f'Invalid binary type: {type_}')
 		
 
-MLIC_SIDE = 128
+MLIC_SIDE = 256
 
 SKIP_FRAMES = 1
 WIN_SCALE   = 0.25
