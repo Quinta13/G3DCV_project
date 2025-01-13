@@ -31,7 +31,7 @@ class Timer:
         mm = int((time % 3600) // 60)
         ss = time % 60
         
-        if hh > 0: return f'{hh} hour{"s" if hh>1 else ""}, {mm} min, {ss:.2f} sec'
+        if hh > 0: return f'{hh} hour{"s" if hh>1 else ""}, {mm} min, {int(ss)} sec'
         if mm > 0: return f'{mm} min, {int(ss)} sec'
         return f'{ss:.2f} sec'
     

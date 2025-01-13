@@ -1,3 +1,4 @@
+from functools import partial
 import itertools
 import pickle
 import os
@@ -10,7 +11,7 @@ from numpy.typing import NDArray
 from matplotlib.figure import Figure
 from scipy.interpolate import Rbf
 
-from src.model.typing import Shape
+from src.model.typing import Shape, Frame
 from src.model.mlic import MLIC
 from src.utils.misc import default
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer
@@ -21,21 +22,21 @@ class BasisInterpolation:
 		self, 
 		basis: NDArray,
 		min_max_coors : Tuple[Tuple[float, float], ...],
-		min_max_values: Tuple[float, float] | None = None
+		min_max_values: Tuple[float, float]
 	):
 		
 		self._basis : NDArray = basis
 
-		min_val, max_val = default(min_max_values, (float(basis.min()), float(basis.max())))
+		min_val, max_val = min_max_values
 
 		# Check if basis is withing mix and max values
-		if not  np.all((min_val <= self._basis) & (self._basis <= max_val)):
-			raise ValueError(f'The minimum value of the basis is not within the minimum and maximum values of the basis. ')
+		#if not  np.all((min_val <= self._basis) & (self._basis <= max_val)):
+		#	raise ValueError(f'The minimum value of the basis is not within the minimum and maximum values of the basis. ')
 		
 		self._min_max_values: Tuple[float, float] = min_val, max_val
 		
-		if not (self.n_dims == len(min_max_coors)):
-			raise ValueError(f'The number of basis dimensions ({self.n_dims}) don\'t match the length of min and max values {len(min_max_coors)}. ')
+		# if not (self.n_dims == len(min_max_coors)):
+		# 	raise ValueError(f'The number of basis dimensions ({self.n_dims}) don\'t match the length of min and max values {len(min_max_coors)}. ')
 		
 		self._min_max_coords: Tuple[Tuple[float, float], ...] = min_max_coors
 
@@ -83,6 +84,8 @@ class BasisInterpolation:
 			idx = (c - min_val) / step
 			out_idx.append(idx)
 		
+		out_idx = out_idx[::-1] # Reverse the order to match the numpy indexing
+		
 		return tuple(out_idx)
 	
 	@staticmethod
@@ -92,7 +95,9 @@ class BasisInterpolation:
 		shape         : Shape
 	) -> Tuple[int, ...]:
 		
-		return tuple(map(int, BasisInterpolation.map_coordinate(coord, min_max_coords, shape)))
+		mapped_coord = BasisInterpolation.map_coordinate(coord, min_max_coords, shape)
+		
+		return tuple(map(int, mapped_coord))
 	
 	def plot_interpolation(
 		self,
@@ -103,7 +108,7 @@ class BasisInterpolation:
 		
 		if self.n_dims != 2: raise ValueError(f'The basis must be 2D to plot. ')
 
-		fig, ax = plt.subplots(figsize=(8, 6))
+		fig, ax = plt.subplots(figsize=(10, 6))
 
 		ax.set_title(title, fontsize=14)
 		ax.set_xlabel('U Light')
@@ -141,10 +146,16 @@ class BasisInterpolation:
 				s=25,           # Size of scatter points
 				linewidths=0.5,  # Edge width for scatter points
 				vmin=vmin, 
-				vmax=vmax
+				vmax=vmax,
 			)
 		
-		img = ax.imshow(self.basis, cmap='viridis', vmin=vmin, vmax=vmax)  # type: ignore
+		img = ax.imshow(
+			self.basis, 
+			cmap='viridis', 
+			vmin=vmin, 
+			vmax=vmax,
+		)
+
 		fig.colorbar(img, ax=ax, label='Pixel Luminance')
 		
 		return fig
@@ -169,20 +180,27 @@ class BasisInterpolationCollection:
 
 		self._out_shape: Shape | None = out_shape
 
-	def __str__ (self): return f'{self.__class__.__name__}[basis: {len(self)}; shape: {"x".join([str(i) for i in self.shape])}]'
+	def __str__ (self): return f'{self.__class__.__name__}['\
+		f'basis: {len(self)}; '\
+		f'basis shape: {"x".join([str(i) for i in self.shape])}'\
+		f'{f"; out shape: {self._out_shape[0]}x{self._out_shape[1]}" if self._out_shape else ""}]'
+	
 	def __repr__(self): return str(self)
 
 	def __len__(self): return self._basis_interpolations.shape[0]
 
-	def __getitem__(self, coord: Tuple[float, ...]) -> NDArray:
+	def __getitem__(self, index: int) -> BasisInterpolation: 
+		
+		return BasisInterpolation(basis=self._basis_interpolations[index], min_max_coors=self._min_max_coords, min_max_values=self._min_max_values)
 
+	def get_interpolation_frame(self, coord: Tuple[float, float]) -> Frame:
+		
 		idx = BasisInterpolation.discretize_coordinate(coord=coord, min_max_coords=self._min_max_coords, shape=self.shape)
 
-		bi = self._basis_interpolations[:, *idx]
+		bi = self._basis_interpolations[:, *idx].astype('uint8')
 
-		if self._out_shape is not None:
-			return bi.reshape(self._out_shape)
-		
+		if self._out_shape is not None: return bi.reshape(self._out_shape)
+	
 		return bi
 	
 	@property
@@ -191,7 +209,7 @@ class BasisInterpolationCollection:
 		return tuple(shape)
 
 	@classmethod
-	def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'MLIC':
+	def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'BasisInterpolationCollection':
 		''' Load camera calibration from a pickle file. '''
 
 		logger.info(msg=f"Loading camera calibration from {path}")
@@ -219,60 +237,60 @@ class BasisInterpolator(ABC):
     
 	def __init__(
 		self, 
-		values      : NDArray,
-		coordinates : NDArray,
-		min_max_coordinates: Tuple[Tuple[float, float], ...],
-		min_max_values: Tuple[float, float] | None = None
+		coords             : NDArray,
+		interpolation_size : Tuple[int, ...],
+		range_coordinates  : Tuple[Tuple[float, float], ...],
+		range_values       : Tuple[float, float]
 	):
-		
-		self._values      : NDArray = values
-
-		if not len(self._values.shape) == 1:
-			raise ValueError(f'The values must be one dimensional. Got {self._values.shape} dimensions. ')
-
-		self._n_points = self._values.shape[0]
-		coord_points, self._dims = coordinates.shape
-
-		if coord_points != self._n_points: 
-			raise ValueError(f'The number of points {self._n_points} must match the one of given coordinates ({coord_points}). ')
-
-		if self._dims != len(min_max_coordinates): 
-			raise ValueError(f'The number of dimensions of the coordinates {self._dims} must match the length of min and max coordinates ({len(min_max_coordinates)}). ')
-
-		self._coordinates         : NDArray                         = coordinates
-		self._min_max_coordinates : Tuple[Tuple[float, float], ...] = min_max_coordinates
-		self._minmax_values       : Tuple[float, float]             = default(min_max_values, (float(self._values.min()), float(self._values.max())))
 	
-	def __str__(self) : return f'{self.__class__.__name__}[{len(self)} points; {self.dims} dimensions]'
+		self._len, self._dims = coords.shape
+
+		if self._dims != len(range_coordinates) != len(interpolation_size): 
+			raise ValueError(
+				f'The number of coordinates dimension ({self._dims}), coordinates ranges ({len(range_coordinates)}) '
+				f'and interpolation size ({len(interpolation_size)}) must be the same. '
+			)
+
+		self._coords             : NDArray                         = coords
+		self._interpolation_size : Tuple[int, ...]                 = interpolation_size
+		self._range_coords       : Tuple[Tuple[float, float], ...] = range_coordinates
+		self._range_values       : Tuple[float, float]             = range_values
+
+		# Precompute interpolation grid
+		self._interpolation_grid = np.meshgrid(*[
+			np.linspace(min_val, max_val, dim) 
+			for (min_val, max_val), dim in zip(self._range_coords, self._interpolation_size)
+		])
+	
+	def __str__(self) -> str : return f'{self.__class__.__name__}['\
+		f'points: {len(self)}; '\
+		f'dimensions: {self.dims}; '\
+		f'interpolation size: {"x".join([str(i) for i in self._interpolation_size])}]'
+	
 	def __repr__(self): return str(self)
 
-	def __len__(self) -> int: return self._n_points
+	def __len__(self) -> int: return self._len
 
 	@property
 	def dims(self) -> int: return self._dims
 
-	@property
 	@abstractmethod
-	def interpolate_function(self) -> Callable[[NDArray], NDArray]: pass
+	def _fit_interpolation_function_on_values(self, values: NDArray) -> Callable[[NDArray], NDArray]: pass
 
-	def interpolate(self, size: Tuple[int, ...]) -> BasisInterpolation:
+	def interpolate(self, values: NDArray) -> BasisInterpolation:
 
-		# Create interpolation grid
-		grid = np.meshgrid(*[
-			np.linspace(min_val, max_val, dim) 
-			for (min_val, max_val), dim in zip(self._min_max_coordinates, size)
-		])
+		# Get interpolation function
+		interpolation_function = self._fit_interpolation_function_on_values(values=values)
 
 		# Interpolate
-		basis = self.interpolate_function(*grid)
+		basis = interpolation_function(*self._interpolation_grid)
 
-		min_val, max_val = self._minmax_values
-		basis = np.clip(basis, min_val, max_val)
+		basis = np.clip(basis, *self._range_values)
 
 		return BasisInterpolation(
 			basis=basis, 
-			min_max_coors=self._min_max_coordinates,
-			min_max_values=self._minmax_values
+			min_max_coors=self._range_coords,
+			min_max_values=self._range_values
 		)
 
 class RTIBasisInterpolator(BasisInterpolator):
@@ -282,28 +300,61 @@ class RTIBasisInterpolator(BasisInterpolator):
 
 	def __init__(
 		self,
-		values      : NDArray,
 		coordinates : NDArray,
+		interpolation_size: Tuple[int, int]
 	):
 		super().__init__(
-			values=values,
-			coordinates=coordinates,
-			min_max_coordinates=(self.COORD_RANGE, self.COORD_RANGE),
-			min_max_values=self.VALUES_RANGE
+			coords=coordinates,
+			interpolation_size=interpolation_size,
+			range_coordinates=(self.COORD_RANGE, self.COORD_RANGE),
+			range_values=self.VALUES_RANGE
 		)
 
 class RTIRadialBasisInterpolator(RTIBasisInterpolator):
 	
-	def __init__(self, values: NDArray, coordinates : NDArray):
-		
-		super().__init__(values=values, coordinates=coordinates)
+	def __init__(self, coordinates: NDArray, interpolation_size: Tuple[int, int]):
+		super().__init__(coordinates=coordinates, interpolation_size=interpolation_size)
 
-	@property
-	def interpolate_function(self) -> Callable[[NDArray], NDArray]:
+	def _fit_interpolation_function_on_values(self, values: NDArray):
 
-		return Rbf(*self._coordinates.T, self._values, function='linear', smooth=0.1)
-	
+		return Rbf(*self._coords.T, values, function='linear', smooth=0.1)
 
+class RTIPolynomialTextureMapInterpolator(RTIBasisInterpolator):
+
+	def __init__(self, coordinates: NDArray, interpolation_size: Tuple[int, int]):
+		super().__init__(coordinates=coordinates, interpolation_size=interpolation_size)
+
+	def _fit_interpolation_function_on_values(self, values: NDArray):
+
+		# Extract light coordinates (Lx, Ly)
+		Lx, Ly = self._coords.T
+
+		# Construct the matrix A for polynomial regression
+		A = np.column_stack([
+			np.ones_like(Lx),  # a0
+			Lx,                # a1
+			Ly,                # a2
+			Lx**2,             # a3
+			Ly**2,             # a4
+			Lx * Ly            # a5
+		])
+
+		# Solve for the coefficients
+		coefficients, _, _, _ = np.linalg.lstsq(A, values, rcond=None)
+
+		# Return an interpolation function
+		def interpolation_function(Lx_new: NDArray, Ly_new: NDArray, coefficients: NDArray) -> NDArray:
+
+			return (
+				coefficients[0] +
+				coefficients[1] * Lx_new +
+				coefficients[2] * Ly_new +
+				coefficients[3] * Lx_new**2 +
+				coefficients[4] * Ly_new**2 +
+				coefficients[5] * Lx_new * Ly_new
+			)
+        
+		return partial(interpolation_function, coefficients=coefficients)
 
 class MLICBasisInterpolator:
     
@@ -320,65 +371,63 @@ class MLICBasisInterpolator:
 		self._logger_verbose : BaseLogger = logger if verbose else SilentLogger()
 		self._is_verbose     : bool       = verbose
 
-		self._mlic               : MLIC                       = mlic
-		self._C_rti_interpolator : Type[RTIBasisInterpolator] = C_rti_interpolator
-		self._interpolation_size : Tuple[int, int]            = interpolation_size 
+		self._mlic               : MLIC                 = mlic
+		self._interpolation_size : Tuple[int, int]      = interpolation_size
+		self._rti_interpolator   : RTIBasisInterpolator = C_rti_interpolator(coordinates=self._mlic.light_directions, interpolation_size=self._interpolation_size)
 	
 	def __str__(self) -> str:
 		
 		sx, sy = self._interpolation_size
+		mx, my = self._mlic.size
 		
 		return f'{self.__class__.__name__}['\
-            f'size: {sx}x{sy}; '\
+            f'interpolation size: {sx}x{sy}; '\
             f'MLIC objects: {len(self._mlic)}; '\
-            f'interpolator: {self._C_rti_interpolator.__name__}]'
+			f'MLIC size: {mx}x{my}; '\
+            f'interpolator: {self._rti_interpolator.__class__.__name__}]'
 	
 	def __repr__(self) -> str: return str(self)
 
 	def get_pixel_interpolation(self, pixel: Tuple[int, int]) -> BasisInterpolation:
 
-		ri_interpolator = self._C_rti_interpolator(
-			values=self._mlic.get_pixel_values(pixel=pixel), 
-			coordinates=self._mlic.light_directions
-		)
-
-		return ri_interpolator.interpolate(size=self._interpolation_size)
+		return self._rti_interpolator.interpolate(values=self._mlic.get_pixel_values(pixel=pixel))
 	
 	def get_interpolation_collection(self, progress: int | None = None, save_dir: str = '') -> BasisInterpolationCollection:
 
-		row, cols = self._mlic.size
-		interpolated_basis = []
-		
-		i = 0
+		rows, cols = self._mlic.size
+		tot = rows * cols
 
-		self._logger.info(msg=f'Starting interpolation for all pixels ({np.prod(self._mlic.size)}). ')
+		interpolated_basis = []
+
+		self._logger.info(msg=f'Starting interpolation for all pixels ({tot}). ')
 
 		if save_dir:
 			ISUtils.check_output(path=save_dir, logger=self._logger_verbose)
 			self._logger.info(msg=f'Saving plots to {save_dir}. ')
 
-		for pixel in itertools.product(range(row), range(cols)):
+		timer = Timer()
+
+		for i, (px, py) in enumerate(itertools.product(range(rows), range(cols))):
+
+			if progress and i % progress == 0:
+				self._logger.info(msg=f'Interpolating pixel {i} of {tot} ({i/tot:.2%}) - Elapsed time: {timer}. ')
 			
-			i += 1
-	
-			if i == 10: break
-			
-			bi = self.get_pixel_interpolation(pixel=pixel)
+			bi = self.get_pixel_interpolation(pixel=(px, py))
 
 			interpolated_basis.append(bi)
 
-			if save_dir:
-				px, py = pixel
-				fig = bi.plot_interpolation(
-					title=f'Pixel {pixel}', 
-					points_coord=(self._mlic.get_pixel_values(pixel=pixel), self._mlic.light_directions)
-				)
-
-				save_path = os.path.join(save_dir, f'pixel_{px}_{py}.png')
-				self._logger.info(msg=f'Saving plot for pixel {pixel} to {save_path} . ')
-				fig.savefig(os.path.join(save_dir, f'pixel_{pixel}.png'))
-				plt.close(fig)
+			#if save_dir:
+			#	px, py = pixel
+			#	fig = bi.plot_interpolation(
+			#		title=f'Pixel {pixel}', 
+			#		points_coord=(self._mlic.get_pixel_values(pixel=pixel), self._mlic.light_directions)
+			#	)
+			#
+			#	save_path = os.path.join(save_dir, f'pixel_{px}_{py}.png')
+			#	self._logger.info(msg=f'Saving plot for pixel {pixel} to {save_path} . ')
+			#	fig.savefig(os.path.join(save_dir, f'pixel_{pixel}.png'))
+			#	plt.close(fig)
 		
-		self._logger.info
+		self._logger.info(msg=f'Interpolation completed in {timer} . ')
 
-		return BasisInterpolationCollection(basis_interpolations=interpolated_basis)
+		return BasisInterpolationCollection(basis_interpolations=interpolated_basis, out_shape=self._mlic.size)

@@ -804,7 +804,7 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 		success, total = self.marker_detection_results
 
 		if success == total: info_msg = f'All frames were successfully processed. '
-		else:                info_msg = f'Processed {success} out of {total} frames. ({success / total:.2%}%) '
+		else:                info_msg = f'Processed {success} out of {total} frames. ({success / total:.2%}) '
 		
 		self._logger.info(msg=info_msg)
 

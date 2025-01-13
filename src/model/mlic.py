@@ -102,7 +102,7 @@ class MLIC:
 
         return {
             'object_frame'    : self.add_uv_channels(y_frame=obj_frame),
-            'light_direction' :  MLICDynamicCameraVideoStream._draw_arrow_in_circle(light_direction=light_source)
+            'light_direction' :  MLICDynamicCameraVideoStream.draw_line_direction(light_direction=light_source)
         }
 
     @property
@@ -306,7 +306,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         else: raise AttributeError("Still no light direction processed")
 
     @staticmethod
-    def _draw_arrow_in_circle(light_direction: LightDirection, frame_side: int = 500) -> Frame:
+    def draw_line_direction(light_direction: LightDirection, frame_side: int = 500) -> Frame:
 
         x, y = light_direction
 
@@ -341,7 +341,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
 
         self._light_direction = marker.camera_2d_position(calibration=self._calibration)
 
-        direction_frame = self._draw_arrow_in_circle(light_direction=self._light_direction)
+        direction_frame = self.draw_line_direction(light_direction=self._light_direction)
 
         return super_views | {'light_direction': direction_frame}
 
