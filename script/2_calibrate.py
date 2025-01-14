@@ -32,7 +32,7 @@ match CAMERA_ID:
         raise ValueError(f'Invalid camera id {CAMERA_ID}. ')
 
 CALIBRATION_FILE = 'calibration'
-EXP_NAME         = 'coin1'
+EXP_NAME         = 'coin4'
 
 VIDEO_PATH       = os.path.join(DATA_DIR, CAMERA,  f'{CALIBRATION_FILE}.{CALIBRATION_EXT}')
 CALIBRATION_DIR  = os.path.join(OUT_DIR, EXP_NAME, f'calibration')

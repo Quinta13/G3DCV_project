@@ -137,13 +137,26 @@ class VideoSync:
         self._logger.info(msg=f" > 1. {video1_out}")
         self._logger.info(msg=f" > 2. {video2_out}")
 
-        if video1_out.metadata.frames != video2_out.metadata.frames:
-            self._logger.handle_error(
-                msg=f"Trimmed videos have different number of frames: "\
+        frame_difference = video1_out.metadata.duration - video2_out.metadata.duration
+
+        if frame_difference != 0:
+
+            self._logger.warning(
+                msg=f"After trimming videos have different number of frames: "\
                     f"{video1_out.metadata.frames} and {video2_out.metadata.frames}. "\
-                    f"Please check the synchronization process.",
-                exception=ValueError
             )
+
+            self._logger.info('')
+            video_to_cut = video1_out if frame_difference > 0 else video2_out
+            frame_to_cut = abs(frame_difference)
+
+            self._logger.info(msg=f"Cutting {frame_to_cut} frames from {video_to_cut.name} ...")
+
+            # Cut the video
+            
+
+
+
         else:
             self._logger.info(msg=f"Trimmed videos have the same number of frames: {video1_out.metadata.frames}.")
 

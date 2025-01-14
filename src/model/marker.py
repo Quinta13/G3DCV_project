@@ -447,7 +447,7 @@ class Marker:
 	@property
 	def corner_palette(self) -> List[RGBColor]:
 		return [
-			(35, 173, 173),
+			( 0, 255,  255),
 			( 0, 255,  255),
 			( 0, 255,  255),
 			( 0, 255,  255)
@@ -489,8 +489,11 @@ class Marker:
 
 	def warp(self, frame: Frame, side: int) -> Frame:
 
+		pixel_points = self.to_corners_array()                              # Marker corner pixels in the image plane c0, c1, c2, c3
+		world_points = self.get_world_points(scale=side, homogeneous=False) # World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])
+
 		# Compute the perspective transform matrix
-		H, _ = cv.findHomography(srcPoints=self.to_corners_array(), dstPoints=self.get_world_points(scale=side))
+		H, _ = cv.findHomography(srcPoints=pixel_points, dstPoints=world_points)
 
 		# Apply the perspective transform
 		warped = cv.warpPerspective(src=frame, M=H, dsize=(side, side))
@@ -499,37 +502,33 @@ class Marker:
 	
 	def camera_2d_position(self, calibration: CalibratedCamera, scale: int = 1):
 
-		# Marker corner pixels in the image plane c0, c1, c2, c3
-		pixel_points = self.to_corners_array()
-
-		# World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])
-		world_points = self.get_world_points(scale=scale, homogeneous=False)
+		pixel_points = self.to_corners_array()                               # Marker corner pixels in the image plane c0, c1, c2, c3
+		world_points = self.get_world_points(scale=scale, homogeneous=False) # World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])
 
 		# Homography and Calibration matrix
-		#H, _ = cv.findHomography(srcPoints=pixel_points, dstPoints=world_points)
 		H, _ = cv.findHomography(srcPoints=world_points, dstPoints=pixel_points)
 		K = calibration.camera_mat
 
-		# Step 1: Compute Q = K^-1 * H
+		# Compute RT = K^-1 * H
 		RT = np.linalg.inv(K) @ H
 
-		# Step 2: Extract r1, r2, t
+		# Extract r1, r2, t
 		r1, r2, t = RT.T
 
-		# Step 3: Compute scaling factor alpha = 2 / (||r1|| + ||r2||)
+		# Compute scaling factor alpha = 2 / (||r1|| + ||r2||)
 		alpha = 2 / (np.linalg.norm(r1) + np.linalg.norm(r2))
 
-		# Step 4: Scale r1, r2, t
+		# Scale r1, r2, t
 		RT_norm = RT / alpha
 		r1_norm, r2_norm, t_norm = RT_norm.T
 
-		# Step 5: Compute r3 = r1 x r2
+		# Compute r3 = r1 x r2
 		r3_norm = np.cross(r1_norm, r2_norm)
 
-		# Step 6: Construct rotation matrix, with no guarantee of orthogonality
+		# Construct rotation matrix, with no guarantee of orthogonality
 		Q = np.column_stack((r1_norm, r2_norm, r3_norm))
 
-		# Step 7: Orthonormalize using SVD
+		# Orthonormalize using SVD
 		U, _, Vt = np.linalg.svd(Q)  # Q = U * S * V^t
 		R = U @ Vt                   # R = U * V^t
 
@@ -539,13 +538,13 @@ class Marker:
 		pose = - R.T @ t_norm
 
 		# Normalize pose
-		pose_norm = pose / np.linalg.norm(pose)
+		pose_norm  = pose / np.linalg.norm(pose)
 
+		# Decompose pose
 		u, v, w = pose_norm
 
 		assert w > 0, 'The camera is not pointing towards the marker'
 
-		# Step 6: Return rotation matrix and translation vector
 		return u, v
 
 
@@ -554,11 +553,18 @@ class Marker:
 		for corner1, corner2 in self.adjacent_couples:
 			Point2D.draw_line(frame=frame, point1=corner1, point2=corner2, color=self.line_color, thickness=8)
 
-		for corner, color in zip(self.corners, self.corner_palette):
+		for c_id, (corner, color) in enumerate(zip(self.corners, self.corner_palette)):
 			corner.draw_circle(frame=frame, radius=4, color=color, thickness=12)
 
+			# Add the name close to the point
+			position = (int(corner.x) + 10, int(corner.y) - 10)  # Offset the text position slightly
+			cv.putText(
+				frame, f'{c_id}', position,
+				fontFace=cv.FONT_HERSHEY_SIMPLEX,
+				fontScale=1., color=color, thickness=4
+			)
+
 		self.anchor.draw_cross(frame=frame,  size=17, color=self.anchor_color, thickness=10)
-		#self.anchor.draw_circle(frame=frame, radius=18, color=self.anchor_color, thickness=5)
 
 		return frame
 
@@ -787,7 +793,8 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
         end          : int                        | None = None, 
         skip_frames  : int                               = 1,
         window_size  : Dict[str, Size2D] | Size2D | None = None,
-        exclude_views: List[str]                         = []
+        exclude_views: List[str]                         = [],
+		delay        : int                               = 1
     ):
 		
 		self._success: int = 0
@@ -798,7 +805,8 @@ class MarkerDetectionVideoStream(ThresholdedVideoStream):
 			end=end, 
 			skip_frames=skip_frames, 
 			window_size=window_size, 
-			exclude_views=exclude_views
+			exclude_views=exclude_views,
+			delay=delay
 		)
 
 		success, total = self.marker_detection_results

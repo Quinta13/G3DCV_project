@@ -22,7 +22,7 @@ load_dotenv()
 
 OUT_DIR  = os.getenv('OUT_DIR',  '.')
 
-EXP_NAME   = 'coin1'
+EXP_NAME   = 'coin4'
 CAMERA_ID  = 2
 
 match CAMERA_ID:

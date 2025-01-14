@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import pickle
 from typing import Dict, Iterator, List, Sequence, Tuple
 
+from matplotlib import pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
 import cv2 as cv
@@ -14,7 +15,7 @@ from src.model.stream import Stream, SynchronizedVideoStream
 from src.model.calibration import CalibratedCamera
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
 from src.model.thresholding import Thresholding
-from src.model.typing import Frame, Size2D, Views, Pixel
+from src.model.typing import Frame, Size2D, Views, Pixel, RGBColor
 from src.utils.io_ import BaseLogger, SilentLogger
 from src.utils.misc import Timer, default
 
@@ -101,8 +102,9 @@ class MLIC:
         obj_frame, light_source = self[index]
 
         return {
-            'object_frame'    : self.add_uv_channels(y_frame=obj_frame),
-            'light_direction' :  MLICDynamicCameraVideoStream.draw_line_direction(light_direction=light_source)
+            'object_frame'         : self.add_uv_channels(y_frame=obj_frame),
+            'light_direction'      : MLICDynamicCameraVideoStream.draw_line_direction        (light_direction=light_source),
+            'light_direction_hist' : MLICDynamicCameraVideoStream.draw_line_direction_history(points=self._light_directions[:index+1])
         }
 
     @property
@@ -182,6 +184,12 @@ class MLICAccumulator:
 
     @property
     def processed_info(self) -> Tuple[int, int, int]: return self._object_frames_succ, self._light_directions_succ, self._tot_processed_frames
+
+    @property
+    def object_frames(self)    -> List[Frame]         : return self._object_frames
+
+    @property
+    def light_directions(self) -> List[LightDirection]: return self._light_directions
     
     def add(self, obj_frame: Frame | None, light_direction: LightDirection | None):
 
@@ -277,8 +285,9 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         thresholding    : Thresholding,
         marker_detector : MarkerDetector,
         name            : str        = '',
+        plot_history    : bool       = False,
         logger          : BaseLogger = SilentLogger(),
-        verbose         : bool       = False
+        verbose         : bool       = False,
     ):
         
         super().__init__(
@@ -291,7 +300,9 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
             verbose=verbose
         )
 
-        self._last_processed_frame: int = -1
+        self._light_directions     : List[LightDirection] = []
+        self._last_processed_frame : int                  = -1
+        self._plot_history         : bool                 = plot_history
 
     def __str__(self)  -> str: return f"{self.__class__.__name__}[{self.name}, frames: {len(self)}]"
     def __repr__(self) -> str: return str(self)
@@ -302,8 +313,8 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
     @property
     def last_processed_direction(self) -> LightDirection: 
 
-        if hasattr(self, '_light_direction'): return self._light_direction
-        else: raise AttributeError("Still no light direction processed")
+        try: return self._light_directions[-1]
+        except IndexError: raise AttributeError("Still no light direction processed")
 
     @staticmethod
     def draw_line_direction(light_direction: LightDirection, frame_side: int = 500) -> Frame:
@@ -331,26 +342,94 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         # Draw the red arrow
         cv.arrowedLine(image, center, (arrow_x, arrow_y), (255, 0, 0), thickness=4, tipLength=0.05)
 
+        # Add the light direction as text in the bottom-right corner, with x and y on separate lines
+        text_x         = f"x: {x:+.2f}"
+        text_y         = f"y: {y:+.2f}"
+        font_scale     = 0.6
+        font_thickness = 2
+        padding        = 10
+        line_spacing   = 5
+
+        # Calculate text size to align properly
+        text_x_size, _ = cv.getTextSize(text_x, cv.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+        text_y_size, _ = cv.getTextSize(text_y, cv.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+
+        # Define positions for x and y lines
+        text_x_pos = (frame_side - text_x_size[0] - padding, frame_side - text_y_size[1] - padding - line_spacing)
+        text_y_pos = (frame_side - text_y_size[0] - padding, frame_side - padding)
+
+        for text, text_pos in zip([text_x, text_y], [text_x_pos, text_y_pos]):
+            cv.putText(image, text, text_pos, cv.FONT_HERSHEY_SIMPLEX, font_scale, (255, 0, 0), font_thickness)
+
         return image
+    
+    @staticmethod
+    def draw_line_direction_history(
+        points    : NDArray,
+        img_side  : int      = 500,
+        col_start : RGBColor = (255, 255, 255),
+        col_end   : RGBColor = (  0,   0, 255)
+    ) -> Frame:
+        
+        # Blank image
+        img = np.zeros((img_side, img_side, 3), dtype=np.uint8)
+        n_points = points.shape[0]
+        
+        # Compute center and radius
+        center = (img_side // 2, img_side // 2)
+        radius = img_side // 2
+        
+        # Draw the white circle
+        cv.circle(img, center, radius, (255, 255, 255), thickness=4)
+
+        # Normalize the points from [-1, 1] to pixel coordinates
+        normalized_points = np.empty_like(points, dtype=int)
+        normalized_points[:, 0] = (center[0] + points[:, 0] * radius).astype(int)  # Scale x
+        normalized_points[:, 1] = (center[1] - points[:, 1] * radius).astype(int)  # Scale y
+
+        # Plot point with color gradient
+        for j, (x, y) in enumerate(normalized_points.astype(int)):
+            
+            # Compute the color based on the gradient
+            color = tuple(
+                int(col_start[i] + (j/n_points) * (col_end[i] - col_start[i]))
+                for i in range(3)
+            )
+
+            cv.circle(img, (x, y), radius=3, color=color, thickness=-1)
+
+        return img
 
     def _process_marker(self, views: Views, marker: Marker, frame_id: int) -> Views:
+
+        if frame_id == 0: self._light_directions = []
 
         self._last_processed_frame = frame_id
 
         super_views = super()._process_marker(views=views, marker=marker, frame_id=frame_id)
 
-        self._light_direction = marker.camera_2d_position(calibration=self._calibration)
+        light_direction = marker.camera_2d_position(calibration=self._calibration)
 
-        direction_frame = self.draw_line_direction(light_direction=self._light_direction)
+        self._light_directions.append(light_direction)
 
-        return super_views | {'light_direction': direction_frame}
+        direction_frame = self.draw_line_direction(light_direction=light_direction)
+
+        views_out = super_views | {'light_direction': direction_frame}
+
+        if self._plot_history:
+
+            direction_hist_frame = self.draw_line_direction_history(points=np.array(self._light_directions))
+            views_out |= {'light_direction_hist': direction_hist_frame}
+        
+        return views_out
 
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
 
         super_views = super()._process_frame(frame=frame, frame_id=frame_id)
 
-        return super_views | ({'light_direction': np.zeros_like(frame)} if 'light_direction' not in super_views else super_views)
-
+        return super_views |\
+            ( {'light_direction'     : np.zeros_like(frame)} if 'light_direction'      not in super_views else super_views) |\
+            (({'light_direction_hist': np.zeros_like(frame)} if 'light_direction_hist' not in super_views else super_views) if self._plot_history else {})
 class MLICCollector(SynchronizedVideoStream):
 
     def __init__(
@@ -400,14 +479,14 @@ class MLICCollector(SynchronizedVideoStream):
         win_square_size  : Size2D = (win_square_side, win_square_side)
 
         window_size: Dict[str, Dict[str, Size2D]] = {
-            mlic_static.name :  {view: static_win_size  if view != 'warped'          else win_square_size for view in mlic_static .views},
-            mlic_dynamic.name:  {view: dynamic_win_size if view != 'light_direction' else win_square_size for view in mlic_dynamic.views}
+            mlic_static.name :  {view: static_win_size  if view not in ['warped']                                  else win_square_size for view in mlic_static .views},
+            mlic_dynamic.name:  {view: dynamic_win_size if view not in ['light_direction', 'light_direction_hist'] else win_square_size for view in mlic_dynamic.views}
         }
 
         # Exclude views
         exclude_views = {
             mlic_static .name : [view for view in mlic_static.views  if view not in ['marker', 'warped']],
-            mlic_dynamic.name : [view for view in mlic_dynamic.views if view not in ['marker', 'light_direction']]
+            mlic_dynamic.name : [view for view in mlic_dynamic.views if view not in ['marker', 'light_direction', 'light_direction_hist']]
         }
 
         # Initialize the accumulator

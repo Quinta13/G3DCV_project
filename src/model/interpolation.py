@@ -21,24 +21,24 @@ class BasisInterpolation:
 	def __init__(
 		self, 
 		basis: NDArray,
-		min_max_coors : Tuple[Tuple[float, float], ...],
-		min_max_values: Tuple[float, float]
+		min_max_coords : Tuple[Tuple[float, float], ...],
+		min_max_values : Tuple[float, float]
 	):
 		
 		self._basis : NDArray = basis
 
-		min_val, max_val = min_max_values
 
 		# Check if basis is withing mix and max values
-		#if not  np.all((min_val <= self._basis) & (self._basis <= max_val)):
+		# min_val, max_val = min_max_values
+		# if not  np.all((min_val <= self._basis) & (self._basis <= max_val)):
 		#	raise ValueError(f'The minimum value of the basis is not within the minimum and maximum values of the basis. ')
 		
-		self._min_max_values: Tuple[float, float] = min_val, max_val
+		self._min_max_values: Tuple[float, float] = min_max_values
 		
 		# if not (self.n_dims == len(min_max_coors)):
 		# 	raise ValueError(f'The number of basis dimensions ({self.n_dims}) don\'t match the length of min and max values {len(min_max_coors)}. ')
 		
-		self._min_max_coords: Tuple[Tuple[float, float], ...] = min_max_coors
+		self._min_max_coords: Tuple[Tuple[float, float], ...] = min_max_coords
 
 	@property
 	def basis(self) -> NDArray: return self._basis
@@ -80,11 +80,11 @@ class BasisInterpolation:
 
 			if not (min_val <= c <= max_val): raise ValueError(f'The {i+1} coordinate {c} is not within the minimum and maximum values of the basis [{min_val}, {max_val}]. ')
 			
-			step = (max_val - min_val) / (dim - 1)
+			step = (max_val - min_val) / dim
 			idx = (c - min_val) / step
 			out_idx.append(idx)
 		
-		out_idx = out_idx[::-1] # Reverse the order to match the numpy indexing
+		# out_idx = out_idx[::-1] # Reverse the order to match the numpy indexing
 		
 		return tuple(out_idx)
 	
@@ -95,15 +95,24 @@ class BasisInterpolation:
 		shape         : Shape
 	) -> Tuple[int, ...]:
 		
-		mapped_coord = BasisInterpolation.map_coordinate(coord, min_max_coords, shape)
-		
-		return tuple(map(int, mapped_coord))
+		mapped_coord = BasisInterpolation.map_coordinate(
+			coord=coord, 
+			min_max_coords=min_max_coords, 
+			shape=shape
+		)
+
+		out_idx = []
+		for c, dim in zip(mapped_coord, shape):
+			idx = int(np.clip(c, 0, dim-1))
+			out_idx.append(idx)
+			
+		return tuple(out_idx)
 	
 	def plot_interpolation(
 		self,
-		title: str = 'Basis Interpolation',
-		min_max_colorbar: bool = False,
-		points_coord: Tuple[NDArray, NDArray] | None = None
+		title            : str = 'Basis Interpolation',
+		min_max_colorbar : bool = False,
+		points_coord     : Tuple[NDArray, NDArray] | None = None
 	) -> Figure:
 		
 		if self.n_dims != 2: raise ValueError(f'The basis must be 2D to plot. ')
@@ -121,11 +130,8 @@ class BasisInterpolation:
 		ax.set_xlim(0, dim_x-1); ax.set_xticks(np.linspace(0, dim_x-1, STEP)); ax.set_xticklabels(np.linspace(min_x, max_x, STEP))
 		ax.set_ylim(0, dim_y-1); ax.set_yticks(np.linspace(0, dim_y-1, STEP)); ax.set_yticklabels(np.linspace(min_y, max_y, STEP))
 
-		if min_max_colorbar:
-			vmin, vmax = self.min_max_values
-		else:
-			vmin, vmax = self.basis.min(), self.basis.max()
-	
+		if min_max_colorbar: vmin, vmax = self.min_max_values
+		else:                vmin, vmax = self.basis.min(), self.basis.max()
 
 		if points_coord is not None:
 			
@@ -191,13 +197,13 @@ class BasisInterpolationCollection:
 
 	def __getitem__(self, index: int) -> BasisInterpolation: 
 		
-		return BasisInterpolation(basis=self._basis_interpolations[index], min_max_coors=self._min_max_coords, min_max_values=self._min_max_values)
+		return BasisInterpolation(basis=self._basis_interpolations[index], min_max_coords=self._min_max_coords, min_max_values=self._min_max_values)
 
 	def get_interpolation_frame(self, coord: Tuple[float, float]) -> Frame:
 		
 		idx = BasisInterpolation.discretize_coordinate(coord=coord, min_max_coords=self._min_max_coords, shape=self.shape)
 
-		bi = self._basis_interpolations[:, *idx].astype('uint8')
+		bi = self._basis_interpolations[:, *idx[::-1]].astype('uint8')
 
 		if self._out_shape is not None: return bi.reshape(self._out_shape)
 	
@@ -289,7 +295,7 @@ class BasisInterpolator(ABC):
 
 		return BasisInterpolation(
 			basis=basis, 
-			min_max_coors=self._range_coords,
+			min_max_coords=self._range_coords,
 			min_max_values=self._range_values
 		)
 

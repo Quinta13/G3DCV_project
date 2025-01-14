@@ -15,7 +15,7 @@ OUT_DIR  = os.getenv('OUT_DIR',  '.')
 CAMERA_1, CAMERA_1_EXT, CAMERA_1_WINSIZE = 'cam1-static',       'mov', (324, 576)
 CAMERA_2, CAMERA_2_EXT, CAMERA_2_WINSIZE = 'cam2-moving_light', 'mp4', (576, 324)
 
-EXP_NAME     = 'coin1'
+EXP_NAME     = 'coin5'
 
 INPUT_1  = os.path.join(DATA_DIR, CAMERA_1, f'{EXP_NAME}.{CAMERA_1_EXT}')
 INPUT_2  = os.path.join(DATA_DIR, CAMERA_2, f'{EXP_NAME}.{CAMERA_2_EXT}')

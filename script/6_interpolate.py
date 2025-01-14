@@ -9,7 +9,7 @@ load_dotenv()
 
 OUT_DIR  = os.getenv('OUT_DIR', '.')
 
-INTERPOLATION_ALGO = 'rbf'
+INTERPOLATION_ALGO = 'ptm'
 
 match INTERPOLATION_ALGO:
 
@@ -24,7 +24,7 @@ MLIC_PATH         = os.path.join(OUT_DIR, EXP_NAME,  'mlic', 'mlic.pkl')
 INTERPOLATION_DIR = os.path.join(OUT_DIR, EXP_NAME, 'interpolation', INTERPOLATION_ALGO)
 
 INTERPOLATION_SIZE = (48, 48)
-PROGRESS           = 250
+PROGRESS           = 1000
 
 if __name__ == "__main__":
 

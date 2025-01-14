@@ -51,6 +51,8 @@ SKIP_FRAMES = 1
 WIN_SCALE   = 0.25
 WIN_SQUARE  = 250
 
+PLOT_HISTORY = True
+
 DETECTOR_PARAMS = {
 	'white_thresh'  : 230,
     'black_thresh'  : 25,
@@ -94,7 +96,8 @@ def main():
         calibration=C_2, 
         thresholding=dynamic_thresholding,
         marker_detector=marker_detector, 
-        logger=logger
+        logger=logger,
+		plot_history=PLOT_HISTORY
     )
     logger.info(f'Dynamic video stream: {mlic_dynamic}')
     logger.info(f' - Using thresholding: {dynamic_thresholding}')

@@ -24,7 +24,7 @@ DATA_DIR = os.getenv('DATA_DIR', '.')
 OUT_DIR  = os.getenv('OUT_DIR', '.')
 
 CAMERA_ID = 2
-EXP_NAME = 'coin1'
+EXP_NAME = 'coin4'
 
 match CAMERA_ID:
 
