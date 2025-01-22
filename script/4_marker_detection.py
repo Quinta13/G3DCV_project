@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from src.model.marker import MarkerDetectionVideoStream, MarkerDetector
 from src.model.thresholding import AdaptiveThresholding, OtsuThresholding, Thresholding, TopHatOtsuThresholding
-from src.model.calibration import CalibratedCamera
+from src.utils.calibration import CalibratedCamera
 from src.utils.misc import Timer
 from src.utils.io_ import IOUtils, FileLogger, VideoFile
 

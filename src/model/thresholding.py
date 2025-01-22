@@ -3,9 +3,9 @@ from typing import Any, Dict
 import cv2 as cv
 from cv2.typing import Size
 
-from src.model.calibration import CalibratedVideoStream, CalibratedCamera
+from src.utils.calibration import CalibratedVideoStream, CalibratedCamera
 from src.utils.io_ import SilentLogger
-from src.model.typing import Frame, Views
+from src.utils.typing import Frame, Views
 from src.utils.io_ import BaseLogger
 
 class Thresholding(ABC):
@@ -145,29 +145,6 @@ class AdaptiveThresholding(Thresholding):
         )
 
         return views | {'binary': frame_b}
-
-class AdaptiveThresholdingPlusClosing(AdaptiveThresholding):
-
-    def __init__(self, block_size: int, c: int, kernel_size: Size, kernel_shape: int = cv.MORPH_ELLIPSE):
-        super().__init__(block_size=block_size, c=c)
-        self._kernel_size  = kernel_size
-        self._kernel_shape = kernel_shape
-
-    @property
-    def params(self) -> Dict[str, Any]: return super().params | {'closing kernel size': f'{self._kernel_size[0]}x{self._kernel_size[1]}'}
-
-    def __call__(self, frame: Frame) -> Views:
-        
-        # 1. Apply adaptive Thresholded
-        views = super().__call__(frame=frame)
-        adaptive = views['binary']
-
-        # 2. Apply morphological closing
-        kernel        = cv.getStructuringElement(shape=self._kernel_shape, ksize=self._kernel_size)
-        frame_closing = cv.morphologyEx(src=adaptive, op=cv.MORPH_CLOSE, kernel=kernel, iterations=1)
-
-        # NOTE: The 'binary' key is overwriting the previous value
-        return views | {'adaptive': adaptive} | {'binary': frame_closing}
 
 class ThresholdedVideoStream(CalibratedVideoStream):
 

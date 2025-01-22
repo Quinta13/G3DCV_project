@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from matplotlib.figure import Figure
 from scipy.interpolate import Rbf
 
-from src.model.typing import Shape, Frame
+from src.utils.typing import Shape, Frame
 from src.model.mlic import MLIC
 from src.utils.misc import default
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer

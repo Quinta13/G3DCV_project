@@ -1,12 +1,13 @@
-from dataclasses import dataclass
+import ipywidgets as widgets
 import math
 import time
-from typing import List, Tuple, TypeVar
+from typing import Callable, List, Tuple, TypeVar
 
 import matplotlib.pyplot as plt
-import numpy as np
+from IPython.display import display
+from numpy.typing import NDArray
 
-from src.model.typing import RGBColor
+from src.utils.typing import RGBColor
 
 # _______________________________ TYPING _______________________________
 
@@ -74,4 +75,37 @@ def grid_size(n: int) -> Tuple[int, int]:
     
     return rows, cols
 
+# ------------------------------ NOTEBOOKS ------------------------------
+
+def launch_widget(widgets_: List[widgets.Widget], update_fn: Callable):
+
+    # Adjust the layout and style of each widget
+    for widget in widgets_:
+        # Set layout and style for better display
+        # widget.layout = widgets.Layout(width='500px')  # type: ignore - Adjust overall width
+        if hasattr(widget, 'style'):
+            widget.style = {'description_width': '150px'}  # type: ignore -  Adjust label width
+        
+        # Attach observer
+        widget.observe(update_fn, names='value')
+    
+    # Display widgets
+    display(*widgets_)
+    
+    # Trigger initial update
+    update_fn(change={'new': 0})
+
+def display_frames(frames: List[Tuple[str, NDArray]]):
+
+    figsize = (5 * len(frames), 5)
+    
+    plt.figure(figsize=figsize)
+    
+    for i, (title, frame) in enumerate(frames):
+        plt.subplot(1, len(frames), i + 1)
+        plt.imshow(frame, cmap='gray')
+        plt.title(title)
+        plt.axis('off')
+    
+    plt.show()
 

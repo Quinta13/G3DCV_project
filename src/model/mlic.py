@@ -10,12 +10,12 @@ from numpy.typing import NDArray
 import cv2 as cv
 
 from src.utils.io_ import InputSanitizationUtils as ISUtils, PathUtils
-from src.model.typing import LightDirection
-from src.model.stream import Stream, SynchronizedVideoStream
-from src.model.calibration import CalibratedCamera
+from src.utils.typing import LightDirection
+from src.utils.stream import Stream, SynchronizedVideoStream
+from src.utils.calibration import CalibratedCamera
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
 from src.model.thresholding import Thresholding
-from src.model.typing import Frame, Size2D, Views, Pixel, RGBColor
+from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor
 from src.utils.io_ import BaseLogger, SilentLogger
 from src.utils.misc import Timer, default
 
@@ -285,6 +285,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         thresholding    : Thresholding,
         marker_detector : MarkerDetector,
         name            : str        = '',
+        method          : str        = 'algebraic',
         plot_history    : bool       = False,
         logger          : BaseLogger = SilentLogger(),
         verbose         : bool       = False,

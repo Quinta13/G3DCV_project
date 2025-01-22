@@ -9,9 +9,9 @@ import numpy as np
 import cv2 as cv
 from numpy.typing import NDArray
 
-from src.model.calibration import CalibratedCamera
+from src.utils.calibration import CalibratedCamera
 from src.model.thresholding import ThresholdedVideoStream, Thresholding
-from src.model.typing import Frame, RGBColor, Views, Size2D, LightDirection
+from src.utils.typing import Frame, RGBColor, Views, Size2D, LightDirection
 from src.utils.misc   import default, generate_palette
 from src.utils.io_ import BaseLogger, SilentLogger
 
@@ -500,11 +500,13 @@ class Marker:
 
 		return warped
 	
-	def camera_2d_position(self, calibration: CalibratedCamera, scale: int = 1):
-
-		pixel_points = self.to_corners_array()                               # Marker corner pixels in the image plane c0, c1, c2, c3
-		world_points = self.get_world_points(scale=scale, homogeneous=False) # World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])
-
+	def _camera_2d_position_algebraic(
+		self, 
+		pixel_points: NDArray,
+		world_points: NDArray,
+		calibration: CalibratedCamera
+	) -> Tuple[NDArray, NDArray]:
+		
 		# Homography and Calibration matrix
 		H, _ = cv.findHomography(srcPoints=world_points, dstPoints=pixel_points)
 		K = calibration.camera_mat
@@ -534,8 +536,49 @@ class Marker:
 
 		assert np.allclose(R @ R.T, np.eye(3)), 'R is not orthonormal'
 
+		return R, t_norm
+
+	def _camera_2d_position_geometric(
+		self, 
+		pixel_points: NDArray,
+		world_points: NDArray,
+		calibration: CalibratedCamera,
+		dist_coeffs: NDArray | None = None
+	) -> Tuple[NDArray, NDArray]:
+		
+		# Camera matrix
+		K = calibration.camera_mat
+
+		#Distortion coefficients
+		dist_coeffs = default(dist_coeffs, np.zeros(5))
+		
+		# Use p2p algorithm
+		succ, R, t = cv.solvePnP(
+			objectPoints=world_points,
+			imagePoints=pixel_points,
+			cameraMatrix=K,
+			distCoeffs=dist_coeffs
+		)
+
+		if not succ: raise ValueError('PnP algorithm failed to converge. ')
+
+		return R, t
+	
+	def camera_2d_position(self, calibration: CalibratedCamera, method: str = 'algebraic', scale: int = 1):
+
+		pixel_points = self.to_corners_array()                               # Marker corner pixels in the image plane c0, c1, c2, c3
+		world_points = self.get_world_points(scale=scale, homogeneous=False) # World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])
+
+		match method.lower():
+
+			case 'algebraic': get_RT_fn = self._camera_2d_position_algebraic
+			case 'geometric': get_RT_fn = self._camera_2d_position_geometric
+			case _: raise ValueError(f'Unknown method to compute geometric camera position: {method}. ')
+		
+		R, t = get_RT_fn(pixel_points=pixel_points, world_points=world_points, calibration=calibration)
+		
 		# Compute camera pose
-		pose = - R.T @ t_norm
+		pose = - R.T @ t
 
 		# Normalize pose
 		pose_norm  = pose / np.linalg.norm(pose)
@@ -572,9 +615,9 @@ class MarkerDetector:
 
 	def __init__(
 		self, 
-		white_thresh  : int = 255 - 25,
-		black_thresh  : int =   0 + 25,
-		min_area      : int = 200,
+		white_thresh  : int   = 255 - 25,
+		black_thresh  : int   =   0 + 25,
+		min_area      : int   = 200,
 		max_area_prop : float = 0.5
 	):
 

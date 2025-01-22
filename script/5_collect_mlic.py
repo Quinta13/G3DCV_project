@@ -8,7 +8,7 @@ from src.model.marker import MarkerDetector
 from src.model.mlic import MLICDynamicCameraVideoStream, MLICStaticCameraVideoStream, MLICCollector
 from src.model.thresholding import AdaptiveThresholding, BaseThresholding, OtsuThresholding, Thresholding, TopHatOtsuThresholding
 from src.utils.io_ import FileLogger, IOUtils, VideoFile
-from src.model.calibration import CalibratedCamera
+from src.utils.calibration import CalibratedCamera
 from src.utils.misc import Timer
 
 load_dotenv()

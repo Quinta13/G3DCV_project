@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import numpy as np
-from src.model.typing import Frame, Size2D
-from src.model.stream import VideoStream
+from src.utils.typing import Frame, Size2D
+from src.utils.stream import VideoStream
 from src.utils.io_ import InputSanitizationUtils as ISUtils, PathUtils
 
 
@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 from src.utils.misc import Timer, default
 from src.utils.io_ import SilentLogger
 from src.utils.io_ import BaseLogger
-from src.model.typing import Views
+from src.utils.typing import Views
 
 
 @dataclass
@@ -23,7 +23,7 @@ class CalibratedCamera:
 
     camera_mat       : NDArray        # 3x3 Intrinsic Camera Matrix
     distortion_coeffs: NDArray        # 1x5 Distortion Coefficients
-    params           : Dict[str, Any] # Camera Calibration Hyperparameters
+    info             : Dict[str, Any] # Camera Calibration Hyperparameters
     white_mask       : bool = False   # Whether to fill empty pixels with white
 
     @classmethod
@@ -64,7 +64,7 @@ class CalibratedCamera:
         return cls(
             camera_mat=camera_mat,
             distortion_coeffs=distortion_coeffs,
-            params=params_ | {"reprojection_error": ret},
+            info=params_ | {"reprojection_error": ret},
         )
     
     @classmethod
@@ -81,10 +81,11 @@ class CalibratedCamera:
                 [   0,     0,      1]
             ]),
             distortion_coeffs=np.zeros((1, 5)),
-            params={"reprojection_error": None}
+            info={
+                "reprojection_error": None,
+                "from_trivial_size" : size
+            }
         )
-
-        
 
     @classmethod
     def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'CalibratedCamera':
@@ -107,7 +108,7 @@ class CalibratedCamera:
         dist_str += " | ".join(f"{val:.6f}" for val in self.distortion_coeffs[0]) + "\n"
 
         # Mean Reprojection Error
-        error_str = f"Mean Pixel Error: {self.params.get('reprojection_error', None)}\n"
+        error_str = f"Mean Pixel Error: {self.info.get('reprojection_error', None)}\n"
 
         return f"{K_str}\n{dist_str}\n{error_str}"
 

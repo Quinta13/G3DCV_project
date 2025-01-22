@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 from scipy.io.wavfile import read as wav_read
 
 from src.utils.misc import Timer
-from src.model.typing import Size2D
+from src.utils.typing import Size2D
 
 
 # _______________________________ LOGGER _______________________________
@@ -87,11 +87,14 @@ class PrintLogger(BaseLogger):
 class FileLogger(BaseLogger):
     ''' Logger that writes messages to a .log file. '''
 
-    def __init__(self, file, level=logging.INFO):
+    def __init__(self, file, level=logging.INFO, overwrite: bool = True):
 
         super().__init__(name='FileLogger')
 
         InputSanitizationUtils.check_extension(path=file, ext='.log')
+
+        # Clear the log file by opening it in write mode
+        if overwrite and os.path.exists(file): os.remove(file)
 
         loguru_logger.add(file, level=level)
         self._logger = loguru_logger

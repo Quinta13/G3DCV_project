@@ -11,9 +11,9 @@ import ffmpeg
 import cv2 as cv
 
 
-from src.model.typing import Size2D
-from src.model.calibration import CalibratedCamera
-from src.model.stream import VideoStream
+from src.utils.typing import Size2D
+from src.utils.calibration import CalibratedCamera
+from src.utils.stream import VideoStream
 from src.utils.io_ import (
     PathUtils, AudioFile, VideoFile
 )
@@ -25,19 +25,24 @@ from src.utils.io_ import BaseLogger
 class VideoSync:
 
     AUDIO_EXT = 'wav'
-    VIDEO_EXT = 'mp4'
 
     def __init__(
         self, 
-        video1  : VideoFile, 
-        video2  : VideoFile,
-        out_dir : str, 
-        logger  : BaseLogger = SilentLogger(),
-        verbose : bool = False
+        video1        : VideoFile, 
+        video2        : VideoFile,
+        out_dir       : str, 
+        out_video_ext : str        = 'mp4',
+        logger        : BaseLogger = SilentLogger(),
+        verbose       : bool       = False
     ):
         '''
         Receive in input two video files to synchronize and an output directory to save the synchronization data.
         '''
+
+        # Logger
+        self._logger        : BaseLogger = logger
+        self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
+        self._is_verbose    : bool       = verbose
 
         # Check if the videos refer to the same experiment - i.e. have the same name
         exp1 = PathUtils.get_file_name(video1.path)
@@ -50,14 +55,11 @@ class VideoSync:
                 exception=ValueError
             )
         
-        self._video1  : VideoFile    = video1
-        self._video2  : VideoFile    = video2
-        self._exp_name: str          = exp1
-
-        self._logger        : BaseLogger = logger
-        self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
-        self._is_verbose    : bool       = verbose
-        self._out_dir       : str        = out_dir
+        self._video1        : VideoFile = video1
+        self._video2        : VideoFile = video2
+        self._exp_name      : str       = exp1
+        self._out_video_ext : str       = out_video_ext
+        self._out_dir       : str       = out_dir
 
     # --- MAGIC METHODS ---
 
@@ -123,6 +125,7 @@ class VideoSync:
             video1=self._video1,
             video2=self._video2,
             sync_time=offset,
+            out_video_ext=self._out_video_ext,
             out_path=self.out_dir,
             logger=self._logger
         )
@@ -146,18 +149,7 @@ class VideoSync:
                     f"{video1_out.metadata.frames} and {video2_out.metadata.frames}. "\
             )
 
-            self._logger.info('')
-            video_to_cut = video1_out if frame_difference > 0 else video2_out
-            frame_to_cut = abs(frame_difference)
-
-            self._logger.info(msg=f"Cutting {frame_to_cut} frames from {video_to_cut.name} ...")
-
-            # Cut the video
-            
-
-
-
-        else:
+        else :
             self._logger.info(msg=f"Trimmed videos have the same number of frames: {video1_out.metadata.frames}.")
 
         self._logger.info(msg=f"")
@@ -287,11 +279,12 @@ class VideoSync:
 
     @staticmethod
     def trim_video(
-        video1    : VideoFile, 
-        video2    : VideoFile,
-        sync_time : float,
-        out_path  : str, 
-        logger    : BaseLogger = SilentLogger()
+        video1        : VideoFile, 
+        video2        : VideoFile,
+        sync_time     : float,
+        out_path      : str, 
+        out_video_ext : str        = 'mp4',
+        logger        : BaseLogger = SilentLogger()
     ) -> Tuple[VideoFile, VideoFile]:
         ''' Trims the video signals to the same length by applying an offset derived from the sync time. '''
 
@@ -315,7 +308,7 @@ class VideoSync:
             logger.info(msg=f'Converting video {video.name}')
 
             camera_name = PathUtils.get_folder_name(video.path)
-            out_video_path = os.path.join(out_path, f'{camera_name}.{VideoSync.VIDEO_EXT}')
+            out_video_path = os.path.join(out_path, f'{camera_name}.{out_video_ext}')
             out_video_paths.append(out_video_path)
 
             cmd = (

@@ -5,8 +5,8 @@ import cv2 as cv
 from dotenv import load_dotenv
 from matplotlib import pyplot as plt
 
-from src.model.stream import Stream, SynchronizedVideoStream, VideoStream
-from src.model.calibration import CalibratedVideoStream, CalibratedCamera
+from src.utils.stream import Stream, SynchronizedVideoStream, VideoStream
+from src.utils.calibration import CalibratedVideoStream, CalibratedCamera
 from src.utils.io_ import BaseLogger, IOUtils, FileLogger, VideoFile
 from src.utils.misc import Timer, grid_size
 from src.model.thresholding import (

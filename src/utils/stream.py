@@ -1,27 +1,32 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterator, List, Tuple, Iterable
-from collections import Counter
 from abc import ABC, abstractmethod
+from collections import Counter
+from typing import Any, Dict, Iterator, List, Tuple, Iterable
 
-import numpy as np
 import cv2 as cv
+import numpy as np
 
-from src.model.typing import Frame, Size2D
+from src.utils.typing import Frame, Size2D, Views
 from src.utils.io_ import (
+    SilentLogger, BaseLogger,
     PathUtils, InputSanitizationUtils as ISUtils,
     VideoFile
 )
 from src.utils.misc import default
-from src.utils.io_ import SilentLogger
-from src.utils.io_ import BaseLogger
-from src.model.typing import Views
 
 class Stream(ABC):
+    '''
+    Abstract class representing a stream of frames. A stream can be either a video file or other sources computing online frames.
+    A stream allows for multiple views of the stream content (for example showing different steps of the video processing) 
+    that can be displayed simultaneously in different windows.
+    '''
 
     def __init__(self, name: str, logger: BaseLogger = SilentLogger(), verbose: bool = False):
+        ''' The stream abstract class '''
 
         self._name           : str        = name
+
         self._logger         : BaseLogger = logger
         self._logger_verbose : BaseLogger = logger if verbose else SilentLogger()
         self._is_verbose     : bool       = verbose
@@ -175,6 +180,9 @@ class VideoStream(Stream):
 
             # Read the frame
             ret, frame = self._video_capture.read()
+            
+            # Cast frame to RGB
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
             # Check if the frame was read successfully
             if not ret: break
@@ -218,14 +226,6 @@ class SynchronizedVideoStream:
         if not streams:
             self._logger.handle_error(msg="At least one video stream must be provided.", exception=ValueError)
 
-        # Check if all streams have the same number of frames
-        frames = {len(stream) for stream in streams}
-        if len(frames) > 1:
-            self._logger.handle_error(
-                msg=f"All video streams must have the same number of frames. Got multiple ({len(frames)}): {frames}",
-                exception=ValueError
-            )
-        
         # Check all different names
         repeated_names = {k for k, c in Counter([s.name for s in streams]).items() if c > 1}
         if repeated_names:
@@ -234,7 +234,16 @@ class SynchronizedVideoStream:
                 exception=ValueError
             )
         
-        self._num_frames: int = frames.pop()
+        # Check if all streams have the same number of frames
+        frames = {len(stream) for stream in streams}
+        self._num_frames: int = min(frames)
+        if len(frames) > 1:
+            self._logger.warning(msg=f'Streams have different number of frames. Using the minimum number of frames: {self._num_frames}.')
+            for stream in streams:
+                truncated = len(stream) - self._num_frames
+                if truncated > 0:                    
+                    self._logger.warning(msg=f"- Stream {stream.name} has {len(stream)} frames, truncating last {truncated} frame{'s' if truncated > 1 else ''}.")
+            self._logger.info('')
 
         # Save streams indexed by name
         self._streams: Dict[str, Stream] = {stream.name: stream for stream in streams}
@@ -311,6 +320,9 @@ class SynchronizedVideoStream:
 
         delay_ : int = default(delay, self.delay)
         end_   : int = default(end,   self._num_frames)
+
+        if end_ > self._num_frames: 
+            self._logger.handle_error(msg=f"End frame {end_} is greater than the number of frames {self._num_frames}.", exception=ValueError)
         
         windows_size_ : Dict[str, Size2D] = parse_window_size(window_size)
         active_views  : Dict[str, bool]   = parse_active_views(exclude_views)
