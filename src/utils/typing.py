@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Literal, Tuple
 
 import cv2
 
@@ -18,5 +18,9 @@ Views = Dict[str, Frame]
 ''' Represents different possible frame views of a video stream, indexed by a string key. '''
 
 LightDirection = Tuple[float, float]
+
+LightDirectionMethod = Literal['algebraic', 'geometric']
+
+CornerMaskMethod = Literal['border', 'descendants', 'scaled']
 
 Pixel = Tuple[int, int]

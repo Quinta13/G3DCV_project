@@ -181,11 +181,11 @@ class VideoStream(Stream):
             # Read the frame
             ret, frame = self._video_capture.read()
             
-            # Cast frame to RGB
-            frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-
             # Check if the frame was read successfully
             if not ret: break
+
+            # Cast frame to RGB
+            frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
             # Process the frame if required
             frame_ = self._process_frame(frame=frame, frame_id=frame_id)

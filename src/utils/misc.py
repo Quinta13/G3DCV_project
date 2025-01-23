@@ -95,14 +95,18 @@ def launch_widget(widgets_: List[widgets.Widget], update_fn: Callable):
     # Trigger initial update
     update_fn(change={'new': 0})
 
-def display_frames(frames: List[Tuple[str, NDArray]]):
+def display_frames(frames: List[Tuple[str, NDArray]], n_rows: int = 1):
+    # Calculate the number of columns
+    n_cols = (len(frames) + n_rows - 1) // n_rows  # Ceiling division
 
-    figsize = (5 * len(frames), 5)
+    # Adjust figure size dynamically
+    figsize = (5 * n_cols, 5 * n_rows)
     
     plt.figure(figsize=figsize)
     
     for i, (title, frame) in enumerate(frames):
-        plt.subplot(1, len(frames), i + 1)
+        # Determine the subplot index
+        plt.subplot(n_rows, n_cols, i + 1)
         plt.imshow(frame, cmap='gray')
         plt.title(title)
         plt.axis('off')

@@ -4,7 +4,10 @@ from src.model.preprocessing import ChessboardCameraCalibrator
 from src.utils.calibration import CalibratedVideoStream
 from src.utils.misc import Timer
 from src.utils.io_ import IOUtils, FileLogger
-from src.utils.settings import CALIBRATION_DIR, CALIBRATION_FILE, CALIBRATION_PATH, CAMERA_2, CAMERA_2_RAW_PATH, CAMERA_2_WINSIZE, EXP_NAME
+from src.utils.settings import CALIBRATION_DIR, CALIBRATION_FILE, CALIBRATION_PATH, CAMERA_2, CAMERA_2_RAW_PATH, EXP_NAME
+
+
+CAMERA_2_WINSIZE = (576, 324)
 
 CHESSBOARD_SIZE = (9, 6)
 SAMPLES         = 50

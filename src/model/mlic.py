@@ -15,7 +15,7 @@ from src.utils.stream import Stream, SynchronizedVideoStream
 from src.utils.calibration import CalibratedCamera
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
 from src.model.thresholding import Thresholding
-from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor
+from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor, LightDirectionMethod
 from src.utils.io_ import BaseLogger, SilentLogger
 from src.utils.misc import Timer, default
 
@@ -57,9 +57,9 @@ class MLIC:
     
     @classmethod
     def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'MLIC':
-        ''' Load camera calibration from a pickle file. '''
+        ''' Load MLIC from a pickle file. '''
 
-        logger.info(msg=f"Loading camera calibration from {path}")
+        logger.info(msg=f"Loading Multi-Light Image Collection from {path}")
 
         with open(path, 'rb') as f: return pickle.load(f)
 
@@ -96,7 +96,6 @@ class MLIC:
 
         return self._obj_frames[:, px, py]
 
-
     def get_views(self, index: int) -> Views:
 
         obj_frame, light_source = self[index]
@@ -109,6 +108,19 @@ class MLIC:
 
     @property
     def size(self) -> Size2D: return self._size
+
+    def train_test_split(self, test_size: float = 0.1) -> Tuple[MLIC, MLIC]:
+
+        # Sample test indices at uniform distances from the start to the end
+        test_indices = np.linspace(start=0, stop=len(self)-1, num=int(len(self)*test_size), dtype=int)
+
+        # Create complementary train indices
+        train_indices = np.setdiff1d(np.arange(len(self)), test_indices)
+
+        return  MLIC(object_frames=self._obj_frames[train_indices], light_directions=self._light_directions[train_indices], uv_means=self._uv_means),\
+                MLIC(object_frames=self._obj_frames[test_indices],  light_directions=self._light_directions[test_indices],  uv_means=self._uv_means)
+
+
 
     def to_stream(
         self, name: str = 'mlic',
@@ -284,11 +296,11 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         calibration     : CalibratedCamera,
         thresholding    : Thresholding,
         marker_detector : MarkerDetector,
-        name            : str        = '',
-        method          : str        = 'algebraic',
-        plot_history    : bool       = False,
-        logger          : BaseLogger = SilentLogger(),
-        verbose         : bool       = False,
+        name            : str                  = '',
+        method          : LightDirectionMethod = 'algebraic',
+        plot_history    : bool                 = False,
+        logger          : BaseLogger           = SilentLogger(),
+        verbose         : bool                 = False,
     ):
         
         super().__init__(
@@ -301,9 +313,10 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
             verbose=verbose
         )
 
-        self._light_directions     : List[LightDirection] = []
-        self._last_processed_frame : int                  = -1
-        self._plot_history         : bool                 = plot_history
+        self._light_directions       : List[LightDirection] = []
+        self._last_processed_frame   : int                  = -1
+        self._plot_history           : bool                 = plot_history
+        self._light_direction_method : LightDirectionMethod = method
 
     def __str__(self)  -> str: return f"{self.__class__.__name__}[{self.name}, frames: {len(self)}]"
     def __repr__(self) -> str: return str(self)
@@ -409,7 +422,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
 
         super_views = super()._process_marker(views=views, marker=marker, frame_id=frame_id)
 
-        light_direction = marker.camera_2d_position(calibration=self._calibration)
+        light_direction = marker.camera_2d_position(calibration=self._calibration, method=self._light_direction_method)
 
         self._light_directions.append(light_direction)
 
@@ -459,12 +472,12 @@ class MLICCollector(SynchronizedVideoStream):
 
     def collect(
         self, 
-        start           : int         = 0, 
-        end             : int | None = None, 
-        skip_frames     : int        = 1,
-        delay           : int        = 1,
-        win_rect_scale  : float      = 0.5,
-        win_square_side : int        = 250,
+        start       : int                   = 0, 
+        end         : int | None            = None, 
+        skip_frames : int                   = 1,
+        delay       : int                   = 1,
+        win_rect    : Tuple[Size2D, Size2D] = ((216, 384), (384, 216)),
+        win_square  : Size2D                = (256, 256)
     ) -> MLIC:
         
         assert len(self._streams) == 2, "The synchronized mlic video stream must have exactly two streams"
@@ -475,13 +488,11 @@ class MLICCollector(SynchronizedVideoStream):
         assert isinstance(mlic_dynamic, MLICDynamicCameraVideoStream), "The second stream must be a MLICDynamicCameraVideoStream"
     
         # Window size
-        static_win_size  : Size2D = tuple(int(s * win_rect_scale) for s in mlic_static .metadata.size)  # type: ignore - they have size 2
-        dynamic_win_size : Size2D = tuple(int(s * win_rect_scale) for s in mlic_dynamic.metadata.size)  # type: ignore - they have size 2
-        win_square_size  : Size2D = (win_square_side, win_square_side)
+        static_win, dynamic_win = win_rect
 
         window_size: Dict[str, Dict[str, Size2D]] = {
-            mlic_static.name :  {view: static_win_size  if view not in ['warped']                                  else win_square_size for view in mlic_static .views},
-            mlic_dynamic.name:  {view: dynamic_win_size if view not in ['light_direction', 'light_direction_hist'] else win_square_size for view in mlic_dynamic.views}
+            mlic_static.name :  {view: static_win  if view not in ['warped']                                  else win_square for view in mlic_static .views},
+            mlic_dynamic.name:  {view: dynamic_win if view not in ['light_direction', 'light_direction_hist'] else win_square for view in mlic_dynamic.views}
         }
 
         # Exclude views

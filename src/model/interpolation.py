@@ -1,19 +1,18 @@
 from functools import partial
 import itertools
 import pickle
-import os
+from statistics import mean
 from typing import Tuple, List, Callable, Type
 from abc import ABC, abstractmethod
 
+from matplotlib.axes import Axes
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy.typing import NDArray
-from matplotlib.figure import Figure
 from scipy.interpolate import Rbf
 
 from src.utils.typing import Shape, Frame
 from src.model.mlic import MLIC
-from src.utils.misc import default
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer
 
 class BasisInterpolation:
@@ -80,12 +79,10 @@ class BasisInterpolation:
 
 			if not (min_val <= c <= max_val): raise ValueError(f'The {i+1} coordinate {c} is not within the minimum and maximum values of the basis [{min_val}, {max_val}]. ')
 			
-			step = (max_val - min_val) / dim
+			step = (max_val - min_val) / (dim-1) 
 			idx = (c - min_val) / step
 			out_idx.append(idx)
-		
-		# out_idx = out_idx[::-1] # Reverse the order to match the numpy indexing
-		
+
 		return tuple(out_idx)
 	
 	@staticmethod
@@ -110,16 +107,15 @@ class BasisInterpolation:
 	
 	def plot_interpolation(
 		self,
-		title            : str = 'Basis Interpolation',
 		min_max_colorbar : bool = False,
-		points_coord     : Tuple[NDArray, NDArray] | None = None
-	) -> Figure:
+		points_coord     : Tuple[NDArray, NDArray] | None = None,
+		ax			     : Axes | None = None
+	):
 		
 		if self.n_dims != 2: raise ValueError(f'The basis must be 2D to plot. ')
 
-		fig, ax = plt.subplots(figsize=(10, 6))
+		if ax is None: _, ax = plt.subplots(figsize=(12, 10))
 
-		ax.set_title(title, fontsize=14)
 		ax.set_xlabel('U Light')
 		ax.set_ylabel('V Light')
 
@@ -160,11 +156,11 @@ class BasisInterpolation:
 			cmap='viridis', 
 			vmin=vmin, 
 			vmax=vmax,
+			aspect='auto'  # Allow the image to stretch to fill the axis
 		)
 
-		fig.colorbar(img, ax=ax, label='Pixel Luminance')
+		ax.figure.colorbar(img, ax=ax, label='Pixel Luminance')  # type: ignore
 		
-		return fig
 	
 class BasisInterpolationCollection:
     
@@ -188,7 +184,7 @@ class BasisInterpolationCollection:
 
 	def __str__ (self): return f'{self.__class__.__name__}['\
 		f'basis: {len(self)}; '\
-		f'basis shape: {"x".join([str(i) for i in self.shape])}'\
+		f'basis shape: {"x".join([str(i) for i in self.basis_shape])}'\
 		f'{f"; out shape: {self._out_shape[0]}x{self._out_shape[1]}" if self._out_shape else ""}]'
 	
 	def __repr__(self): return str(self)
@@ -201,18 +197,21 @@ class BasisInterpolationCollection:
 
 	def get_interpolation_frame(self, coord: Tuple[float, float]) -> Frame:
 		
-		idx = BasisInterpolation.discretize_coordinate(coord=coord, min_max_coords=self._min_max_coords, shape=self.shape)
+		idx = BasisInterpolation.discretize_coordinate(coord=coord, min_max_coords=self._min_max_coords, shape=self.basis_shape)
 
 		bi = self._basis_interpolations[:, *idx[::-1]].astype('uint8')
 
-		if self._out_shape is not None: return bi.reshape(self._out_shape)
+		if self.out_shape is not None: return bi.reshape(self.out_shape)
 	
 		return bi
 	
 	@property
-	def shape(self) -> Shape:
+	def basis_shape(self) -> Shape:
 		n_object, *shape = self._basis_interpolations.shape
 		return tuple(shape)
+	
+	@property
+	def out_shape(self) -> Shape | None: return self._out_shape
 
 	@classmethod
 	def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'BasisInterpolationCollection':
@@ -220,6 +219,20 @@ class BasisInterpolationCollection:
 
 		logger.info(msg=f"Loading camera calibration from {path}")
 		with open(path, 'rb') as f: return pickle.load(f)
+	
+	def mse_error(self, mlic: MLIC) -> float:
+
+		errors = []
+
+		for true_frame, light_direction in mlic:
+			
+			predicted_frame = self.get_interpolation_frame(coord=light_direction)
+			frame_pixel_distance = (predicted_frame - true_frame)**2
+			errors.append(frame_pixel_distance.mean())
+
+		mse = mean(errors)
+
+		return float(mse)
 
 	def dump(
         self,
@@ -416,7 +429,7 @@ class MLICBasisInterpolator:
 		for i, (px, py) in enumerate(itertools.product(range(rows), range(cols))):
 
 			if progress and i % progress == 0:
-				self._logger.info(msg=f'Interpolating pixel {i} of {tot} ({i/tot:.2%}) - Elapsed time: {timer}. ')
+				self._logger.info(msg=f' > Interpolating pixel {i} of {tot} ({i/tot:.2%}) - Elapsed time: {timer}. ')
 			
 			bi = self.get_pixel_interpolation(pixel=(px, py))
 

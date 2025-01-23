@@ -43,7 +43,6 @@ def get_widgets():
 		widgets.Dropdown(options=CAMERA_NAMES, value=CAMERA_NAMES[1], description='Camera:',            continuous_update=False),\
 		widgets.IntSlider(value=0, min=0, max=min_frame-1, step=1, description='Frame ID:',             continuous_update=False),\
 		widgets.Dropdown(options=MASK_NAMES,   value=MASK_NAMES  [0], description='Undistortion mask:', continuous_update=False),\
-		widgets.Dropdown(options=MORPH_NAMES,  value=MORPH_NAMES [0], description='Morph:',             continuous_update=False),\
 		widgets.Output()
 
 
@@ -53,7 +52,7 @@ def get_widgets():
 # %%
 from src.model.thresholding import ThresholdedVideoStream, BaseThresholding
 
-camera_w, frame_w, mask_w, morph_w, output_w = get_widgets()
+camera_w, frame_w, mask_w, output_w = get_widgets()
 
 threhsold_w = widgets.IntSlider(value=50,    min=0, max=255, step=1, description='T',                continuous_update=False)
 kernel_w    = widgets.IntSlider(value=3,     min=1, max=121, step=2, description='Blur Kernel Side', continuous_update=False)
@@ -84,7 +83,7 @@ def update_base_threshold(change):
 
 
 launch_widget(
-    widgets_=[camera_w, frame_w, mask_w, morph_w, threhsold_w, kernel_w, blur_w, output_w],
+    widgets_=[camera_w, frame_w, mask_w, threhsold_w, kernel_w, blur_w, output_w],
     update_fn=update_base_threshold
 )
 
@@ -94,7 +93,7 @@ launch_widget(
 # %%
 from src.model.thresholding import OtsuThresholding, ThresholdedVideoStream
 
-camera_w, frame_w, mask_w, morph_w, output_w = get_widgets()
+camera_w, frame_w, mask_w, output_w = get_widgets()
 threhsold_w = widgets.IntSlider(value=50,    min=0, max=255, step=1, description='T',                continuous_update=False)
 kernel_w    = widgets.IntSlider(value=3,     min=1, max=121, step=2, description='Blur Kernel Side', continuous_update=False)
 blur_w      = widgets.Checkbox (value=True,                          description='Apply Blur',       continuous_update=False)
@@ -132,7 +131,7 @@ launch_widget(
 # %%
 from src.model.thresholding import TopHatOtsuThresholding, ThresholdedVideoStream
 
-camera_w, frame_w, mask_w, morph_w, output_w = get_widgets()
+camera_w, frame_w, mask_w, output_w = get_widgets()
 
 kernel_w = widgets.IntSlider(value=111, min=1, max=1001, step=2, description='Structuring element side', continuous_update=False)
 se_w     = widgets.Dropdown(options=MORPH_NAMES, value=MORPH_NAMES[0], description='Structuring element', continuous_update=False)
@@ -170,10 +169,10 @@ launch_widget(
 # %%
 from src.model.thresholding import AdaptiveThresholding, ThresholdedVideoStream
 
-camera_w, frame_w, mask_w, morph_w, output_w = get_widgets()
+camera_w, frame_w, mask_w, output_w = get_widgets()
 
-block_w = widgets.IntSlider(value=111,  min=3,   max=199,  step=2, description='Block Side', continuous_update=False)
-c_w     = widgets.IntSlider(value=15,   min=-50, max=50, step=1, description='C',          continuous_update=False)
+block_w = widgets.IntSlider(value=161,  min= 3,  max=199, step=2, description='Block Side', continuous_update=False)
+c_w     = widgets.IntSlider(value=15,   min=-50, max= 50, step=1, description='C',          continuous_update=False)
 
 def update_adaptive(change):
 
@@ -212,22 +211,31 @@ from src.model.thresholding import Thresholding
 from src.utils.calibration import CalibratedVideoStream
 from src.utils.stream import SynchronizedVideoStream
 from src.utils.io_ import PrintLogger
-from src.utils.settings import CAMERA_1_WINSIZE, CAMERA_2_WINSIZE
+
+CAMERA_1_WINSIZE = (216, 384)
+CAMERA_2_WINSIZE = (384, 216)
 
 
 STREAMS_INFO: Dict[str, Tuple[Type[Thresholding], Dict[str, Any]]] = {
     'simple_threshold' : (BaseThresholding,       {'t': 50}),
     'otsu'             : (OtsuThresholding,       {}),
     'top-hat + otsu'   : (TopHatOtsuThresholding, {'kernel_size': (265, 265), 'kernel_shape': cv.MORPH_CROSS}),
-    'adaptive'         : (AdaptiveThresholding,   {'block_size': 109, 'c': 10})
+    'adaptive'         : (AdaptiveThresholding,   {'block_size': 161, 'c': 15})
 }
 
-CAMERA      = 'static'
+CAMERA      = 'dynamic'
 SKIP_FRAMES = 25
+UNDISTORT_MASK_WHITE = False
 
 streams = []
 path, calibration = CAMERA_INFO[CAMERA]
-window_size = CAMERA_1_WINSIZE if CAMERA == 'static' else CAMERA_2_WINSIZE
+calibration.white_mask = UNDISTORT_MASK_WHITE
+
+match CAMERA:
+	case 'static': window_size = CAMERA_1_WINSIZE
+	case 'dynamic': window_size = CAMERA_2_WINSIZE
+	case _ 	   : raise ValueError(f'Invalid camera: {CAMERA}')
+
 window_size = tuple([size * 4 // 5 for size in window_size])
 logger = PrintLogger()
 
@@ -266,5 +274,8 @@ sync_stream.play(
 	skip_frames=SKIP_FRAMES,
 	exclude_views=exclude_views
 )
+
+# %%
+
 
 

@@ -4,12 +4,14 @@ import os
 from src.model.preprocessing import VideoSync
 from src.utils.settings import (
     EXP_NAME, SYNC_DIR,
-    CAMERA_1_WINSIZE, CAMERA_2_WINSIZE,
     CAMERA_1_RAW_PATH, CAMERA_2_RAW_PATH, SYNC_EXT
 )
 from src.utils.stream import SynchronizedVideoStream
 from src.utils.io_ import VideoFile, IOUtils, FileLogger
 from src.utils.misc import Timer
+
+CAMERA_1_WINSIZE = (324, 576)
+CAMERA_2_WINSIZE = (576, 324)
 
 def main():
 
