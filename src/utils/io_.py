@@ -1,8 +1,16 @@
+'''
+This file contains the implementation of i/o utilities for:
+    - Logging operation for different channels (info, warning, error).
+    - Path manipulation for files and directories.
+    - Input sanitization for file existence and extension.
+    - Audio and video file handling.
+'''
+
 from __future__ import annotations
 
-from abc import abstractmethod
-import logging
 import os
+import logging
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Dict, Set, Tuple, Type
 
@@ -19,8 +27,8 @@ from src.utils.typing import Size2D
 
 class BaseLogger(logging.Logger):
     ''' 
-    Abstract class for loggers with a formatting function for info, warning and error channels.
-    The formatting is implemented as a function that transform an input string into an output string.
+    Abstract class for logging in three different channels: info, warning and error channels.
+    It provides a formatter function to format the log messages.
     '''
 
     def __init__(self, name: str):
@@ -43,22 +51,25 @@ class BaseLogger(logging.Logger):
 
     # --- LOGGING CHANNELS ---
 
-    ''' The pubic methods are predefined with the formatter function. '''
-    def info   (self, msg): [self._info   (self.formatter(msg_)) for msg_ in msg.split("\n")]
-    def warning(self, msg): [self._warning(self.formatter(msg_)) for msg_ in msg.split("\n")]
-    def error  (self, msg): [self._error  (self.formatter(msg_)) for msg_ in msg.split("\n")]
+    ''' The pubic methods are predefined with the formatter function and end-line splitting. '''
+    def info   (self, msg: str): [self._info   (self.formatter(msg_)) for msg_ in msg.split("\n")]
+    def warning(self, msg: str): [self._warning(self.formatter(msg_)) for msg_ in msg.split("\n")]
+    def error  (self, msg: str): [self._error  (self.formatter(msg_)) for msg_ in msg.split("\n")]
 
     ''' The private methods are abstract and must be implemented by the subclasses. '''
-    @abstractmethod
-    def _info   (self, msg): raise NotImplementedError
 
     @abstractmethod
-    def _warning(self, msg): raise NotImplementedError
+    def _info   (self, msg: str): raise NotImplementedError
 
     @abstractmethod
-    def _error  (self, msg): raise NotImplementedError
+    def _warning(self, msg: str): raise NotImplementedError
 
-    def handle_error(self, msg: str, exception: Type[Exception] = ValueError):
+    @abstractmethod
+    def _error  (self, msg: str): raise NotImplementedError
+
+    # --- ERROR HANDLING ---
+
+    def handle_error(self, msg: str, exception: Type[Exception]):
         ''' Log the error message and raise an exception. '''
 
         self.error(msg)
@@ -87,15 +98,24 @@ class PrintLogger(BaseLogger):
 class FileLogger(BaseLogger):
     ''' Logger that writes messages to a .log file. '''
 
-    def __init__(self, file, level=logging.INFO, overwrite: bool = True):
+    def __init__(self, file: str, level=logging.INFO, overwrite: bool = True):
+        '''
+        Initialize the logging by adding a file handler.
+
+        :param file:      The path to the log file.
+        :param level:     The logging level (default: INFO).
+        :param overwrite: Whether to overwrite the log file if it exists (default: True).
+        '''
 
         super().__init__(name='FileLogger')
 
+        # Check the file extension
         InputSanitizationUtils.check_extension(path=file, ext='.log')
 
         # Clear the log file by opening it in write mode
         if overwrite and os.path.exists(file): os.remove(file)
 
+        # Add the file handler
         loguru_logger.add(file, level=level)
         self._logger = loguru_logger
 
@@ -107,6 +127,7 @@ class FileLogger(BaseLogger):
 # _______________________________ CONTAINER UTILS CLASSES _______________________________
 
 class PathUtils:
+    ''' Class container to handle path manipulation. '''
 
     @staticmethod
     def get_folder_path(path: str) -> str: return os.path.dirname(path)
@@ -139,6 +160,7 @@ class PathUtils:
         return ext[1:].lower() # Remove the dot
     
 class IOUtils:
+    ''' Class container to handle input/output operations. '''
 
     @staticmethod
     def make_dir(path: str, logger: BaseLogger = SilentLogger()):
@@ -149,16 +171,11 @@ class IOUtils:
             logger.info(msg=f"Directory created at: {path}")
         else:
             logger.info(msg=f"Directory already found at: {path}")
-    
-    @staticmethod
-    def error_handler(msg: str, logger: BaseLogger, exception: Type[Exception] = ValueError):
-        ''' Log the error message and raise an exception. '''
 
-        logger.error(msg)
-        raise exception(msg)
 
 
 class InputSanitizationUtils:
+    ''' Class container to handle input file sanitization. '''
 
     @staticmethod
     def check_input(path: str, logger: BaseLogger = SilentLogger()):
@@ -169,8 +186,6 @@ class InputSanitizationUtils:
                 msg=f"Input file not found: {path}", 
                 exception=FileNotFoundError
             )
-        else:
-            logger.info(msg=f"Input file found at: {path} ")
 
     @staticmethod
     def check_output(path: str, logger: BaseLogger = SilentLogger()):
@@ -183,14 +198,12 @@ class InputSanitizationUtils:
                 msg=f"Output directory not found: {out_dir}", 
                 exception=FileNotFoundError
             )
-        else:                           
-            logger.info(msg=f"Output directory found at: {out_dir} ")
 
     @staticmethod
     def check_extension(path: str, ext: str | Set[str], logger: BaseLogger = SilentLogger()):
         ''' Check if any of the extensions in the list match the file extension. '''
 
-        if type(ext) == str: ext = {ext}
+        if type(ext) == str: ext = {ext}  # Convert to singleton set if a string is provided
 
         if not any([path.endswith(e) for e in f'.{ext}']):
 
@@ -202,22 +215,20 @@ class InputSanitizationUtils:
 
 # _______________________________ AUDIO & VIDEO FILES _______________________________
 
-
 class AudioFile:
-    ''' Class to handle audio files. '''
+    '''
+    Class to handle audio files. 
+    '''
 
     EXT_AUDIO = {'wav', 'mp3', 'flac', 'ogg', 'm4a', 'wma', 'aac', 'aiff', 'au', 'raw'}
 
     # --- INITIALIZATION ---
 
-    def __init__(self, path: str, logger: BaseLogger = SilentLogger(), verbose: bool = False):
+    def __init__(self, path: str, logger: BaseLogger = SilentLogger()):
         ''' Initialize the audio file with its path '''
 
-        self._logger        : BaseLogger = logger
-        self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
-        self._is_verbose    : bool = verbose
-
-        self._path: str = path
+        self._logger : BaseLogger = logger
+        self._path   : str        = path    # NOTE: Sanitization is done in `_read_audio`
 
         self._rate: int
         self._data: NDArray
@@ -226,22 +237,19 @@ class AudioFile:
     def _read_audio(self) -> Tuple[int, NDArray]:
         ''' Read the audio file and return the sample rate and data. '''
 
-        InputSanitizationUtils.check_input    (path=self.path, logger=self._logger_verbose)
-        InputSanitizationUtils.check_extension(path=self.path, logger=self._logger_verbose, ext=self.EXT_AUDIO)
+        InputSanitizationUtils.check_input    (path=self.path, logger=self._logger)
+        InputSanitizationUtils.check_extension(path=self.path, logger=self._logger, ext=self.EXT_AUDIO)
 
         self._logger.info(msg=f"Reading audio file from {self.path} ...")
 
-        timer = Timer()
-
         try: 
+            timer = Timer()
             rate, data = wav_read(filename=self.path)
             self._logger.info(msg=f"Audio read successfully in {timer}.")
         except Exception as e:
-            self._logger.error(f"Failed to extract audio: {e}")
-            raise e
+            self._logger.handle_error(msg=f"Failed to read audio: {e}", exception=type(e))
 
-        # Convert to mono
-        if data.ndim > 1: data = data.mean(axis=1)
+        if data.ndim > 1: data = data.mean(axis=1)  # Convert to mono
 
         return rate, data
     
@@ -280,7 +288,10 @@ class AudioFile:
 
 
 class VideoFile:
-    ''' Class to handle video files. '''
+    ''' 
+    Class to handle video files. 
+    It provides a dataclass to store video metadata and methods to extract the audio track from the video file.
+    '''
 
     @dataclass
     class VideoMetadata:
@@ -289,47 +300,49 @@ class VideoFile:
         ext          : str             # File extension  
         frames       : int             # Number of video frames
         duration     : float           # Video duration in seconds
-        fps          : float           # Video frame rate in frames per second
+        fps          : float           # Video frame rate in Hz
         size         : Size2D          # Video frame size
         _sample_rate : int | None      # Audio sample rate, if audio stream is present
+
+        # --- INITIALIZATION ---
 
         @classmethod
         def from_dict(cls, data: Dict) -> 'VideoFile.VideoMetadata':
             ''' Create video metadata from a dictionary. '''
 
             try:
+                
                 return cls(
                     ext          = data['ext'],
                     frames       = data['num_frames'],
                     duration     = data['duration'],
                     fps          = data['frame_rate'],
                     size         = data['size'],
-                    _sample_rate = data['sample_rate']
+                    _sample_rate = data.get('sample_rate', None)  # Optional audio sample rate
                 )
 
             except KeyError as e:
                 raise ValueError(f"Invalid dictionary for video metadata: {e}")
 
         @classmethod
-        def from_video_path(cls, path: str, logger: BaseLogger, verbose: bool = False) -> 'VideoFile.VideoMetadata':
-            ''' Load video metadata from a video file path. '''
+        def from_video_path(cls, path: str, logger: BaseLogger) -> 'VideoFile.VideoMetadata':
+            ''' Load video metadata from a video file path using ffmpeg. '''
             
-            logger_verbose = logger if verbose else SilentLogger()
-            
-            InputSanitizationUtils.check_input    (path=path, logger=logger_verbose)
-            InputSanitizationUtils.check_extension(path=path, logger=logger_verbose, ext=VideoFile.VIDEO_EXT)
+            InputSanitizationUtils.check_input    (path=path, logger=logger)
+            InputSanitizationUtils.check_extension(path=path, logger=logger, ext=VideoFile.VIDEO_EXT)
 
             logger.info(msg=f"Loading metadata from video {path}")
-
             probe = ffmpeg.probe(path)
 
             # Video stream
             video_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'video'), None)
-            if not video_stream: logger.handle_error(msg=f"No video stream found in video {path}", exception=ValueError)
+            if not video_stream: 
+                logger.handle_error(msg=f"No video stream found in video {path}", exception=ValueError)
 
             # Audio stream
             audio_stream = next((stream for stream in probe['streams'] if stream['codec_type'] == 'audio'), None)
-            if not audio_stream: logger_verbose.warning(msg=f"No audio stream found in video {path}")
+            if not audio_stream: 
+                logger.warning(msg=f"No audio stream found in video {path}")
 
             # Metadata
             return cls(
@@ -343,17 +356,22 @@ class VideoFile:
                     int(video_stream.get('height', 0))
                 ),
             )
+        
+        # --- MAGIC METHODS ---
 
         def __str__(self) -> str:
 
             return f"{self.__class__.__name__}[ext: {self.ext}; "\
                 f"{self.frames     } frames; "\
                 f"{self.duration   } seconds; "\
-                f"{self.fps } fps; "\
+                f"{self.fps        } fps; "\
                 f"{self.size       } size; " +\
-                (f"{self.sample_rate} Hz" if self.has_audio else "No audio") + "]"
+                (f"{self.sample_rate} Hz" if self.has_audio else "No audio") +\
+                "]"
 
         def __repr__(self) -> str: return str(self)
+
+        # --- PROPERTIES ---
 
         @property
         def has_audio(self) -> bool: return self._sample_rate is not None
@@ -361,37 +379,22 @@ class VideoFile:
         @property
         def sample_rate(self) -> int:
             if not self.has_audio: raise ValueError(f"No audio stream found in video.")
-            return self._sample_rate  # type: ignore - Not none check is done in the property
+            return self._sample_rate  # type: ignore - is not None check is done in the property
 
-        def to_dict(self) -> Dict:
-
-            return {
-                'ext'         : self.ext,
-                'num_frames'  : self.frames,
-                'duration'    : self.duration,
-                'frame_rate'  : self.fps,
-                'size'        : self.size,
-                'sample_rate' : self.sample_rate,
-            }
-
-    VIDEO_EXT = {'mp4', 'avi', 'mov', 'mkv', 'flv', 'webm', 'wmv', 'mpg', 'ogv'}
+    VIDEO_EXT            = {'mp4', 'avi', 'mov', 'mkv', 'flv', 'webm', 'wmv', 'mpg', 'ogv'}
     AUDIO_EXTRACTION_EXT = 'wav'
 
     # --- INITIALIZATION ---
 
-    def __init__(self, path, logger: BaseLogger = SilentLogger(), verbose: bool = False):
+    def __init__(self, path, logger: BaseLogger = SilentLogger()):
         ''' Initialize the video file with its path '''
 
-        self._logger        : BaseLogger = logger
-        self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
-        self._is_verbose    : bool = verbose
-
-        self._path: str = path
+        self._logger : BaseLogger = logger
+        self._path   : str        = path    # NOTE: Sanitization is done in `VideoMetadata.from_video_path`
 
         self._metadata: VideoFile.VideoMetadata = VideoFile.VideoMetadata.from_video_path(
             path=self.path,
-            logger=self._logger, 
-            verbose=self._is_verbose
+            logger=self._logger
         )
     
     # --- MAGIC METHODS ---
@@ -400,10 +403,12 @@ class VideoFile:
 
         w, h = self.metadata.size
         
-        return f"{self.__class__.__name__}[{self.name}; "\
+        return f"{self.__class__.__name__}["\
+            f"{self.name}; "\
             f"duration: {int  (self.metadata.duration     )} sec; "\
             f"size: {w}x{h} pixels; "\
-            f"frame rate: {round(self.metadata.fps, 2)} fps]"
+            f"frame rate: {round(self.metadata.fps, 2)} fps"\
+            "]"
 
     def __repr__(self) -> str: return str(self)
 
@@ -427,17 +432,18 @@ class VideoFile:
 
     @property
     def audio_path(self) -> str: 
-        ''' 
-        Path to the extracted audio file.
-        That is the same as the video file with audio extension.
-        '''
-        return os.path.join(PathUtils.get_folder_path(self.path), f'{PathUtils.get_file_name(self.path)}.{self.AUDIO_EXTRACTION_EXT}')
+        ''' Path to the extracted audio file, the same as the video but file with audio extension. '''
+
+        return os.path.join(
+            PathUtils.get_folder_path(self.path), 
+            f'{PathUtils.get_file_name(self.path)}.{self.AUDIO_EXTRACTION_EXT}'
+        )
 
     # --- AUDIO EXTRACTION ---
 
     '''
     NOTE:   When working on audio file, we extract the audio track from the video file in the same directory.
-            The audio file is deleted when the video file object is deleted.
+            The audio file is deleted when the video file object is collected by the garbage collector.
     '''
 
     def extract_audio_track(self) -> AudioFile:
@@ -446,26 +452,24 @@ class VideoFile:
         if not self.has_audio:
             self._logger.handle_error(f"Cannot extract audio stream in video {self.path}", exception=ValueError)
 
-        audio = self.extract_audio(video=self, out_path=self.audio_path, logger=self._logger, verbose=self._is_verbose)
-        self._logger.info(msg='Use method `close_audio` to remove the audio file from the file system.')
+        audio = self.extract_audio(video=self, out_path=self.audio_path, logger=self._logger)
+        self._logger.info(msg='Use method `close_audio` to remove the audio file from the file system. ')
+
         return audio
 
     @staticmethod
     def extract_audio(
-        video: 'VideoFile',
-        out_path: str,
-        sample_rate: int | None = None,
-        logger: BaseLogger = SilentLogger(),
-        verbose: bool = False
+        video       : 'VideoFile',
+        out_path    : str,
+        sample_rate : int | None = None,
+        logger      : BaseLogger = SilentLogger()
     ) -> AudioFile:
         '''
-        Extract the audio track from the video file and save it to the output path.
+        Static method to extract the audio track from the video file and save it to the output path using ffmpeg.
         It optionally resamples the audio to the given sample rate.
         '''
 
-        verbose_logger = logger if verbose else SilentLogger()
-
-        InputSanitizationUtils.check_output(path=out_path, logger=verbose_logger)
+        InputSanitizationUtils.check_output(path=out_path, logger=logger)
 
         logger.info(msg=f"Extracting audio from {video.path} to {out_path} ...")
 
@@ -482,20 +486,17 @@ class VideoFile:
                 .output(out_path, **sample_rate_args)
                 .overwrite_output()
             )
-            
             cmd.run(overwrite_output=True, quiet=True)
 
             logger.info(msg=f"Audio extracted successfully in {timer}.")
+
             return AudioFile(path=out_path, logger=logger)
 
         except Exception as e:
-            logger.error(f"Failed to extract audio: {e}")
-            raise e
+            logger.handle_error(msg=f"Failed to extract audio: {e}", exception=type(e))
 
     def close_audio(self):
-        '''
-        Close the audio file by removing it from the file system.
-        '''
+        ''' Close the extracted audio file by removing it from the file system. '''
 
         try:
 
@@ -505,11 +506,11 @@ class VideoFile:
             else:
                 self._logger.warning(msg=f"Cannot remove audio file at: {self.audio_path}, not found")
 
-        except Exception as e:
-            self._logger.error(f"Failed to remove audio file: {e}")
-            raise e
+        except Exception as e: 
+            self._logger.error(msg=f"Failed to remove audio file: {e}")
 
     def __del__(self): 
         ''' Remove the audio if it was extracted when the video file object is deleted '''
+
         self._logger = SilentLogger() # Prevent logging
         self.close_audio()

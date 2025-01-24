@@ -9,12 +9,8 @@ from src.model.mlic import MLICDynamicCameraVideoStream, MLICStaticCameraVideoSt
 from src.model.thresholding import AdaptiveThresholding, OtsuThresholding
 from src.utils.io_ import FileLogger, IOUtils, VideoFile
 from src.utils.calibration import CalibratedCamera
-from src.utils.settings import CALIBRATION_FILE, CAMERA_1_PATH, CAMERA_2_PATH, MLIC_DIR
+from src.utils.settings import CALIBRATION_FILE, CAMERA_1_PATH, CAMERA_2_PATH, MLIC_DIR, MLIC_SIZE, LIGHT_POSITION_METHOD
 
-load_dotenv()
-
-MLIC_SIDE = 256
-LIGHT_POSITION_METHOD = 'algebraic'
 
 CALIBRATED_1  = CalibratedCamera.trivial_calibration(size=VideoFile(path=CAMERA_1_PATH).metadata.size)
 CALIBRATED_2  = CalibratedCamera.from_pickle(path=CALIBRATION_FILE)
@@ -38,7 +34,7 @@ SQUARE_WINSIZE   = (256, 256)
 
 def main():
 
-    suffix = f'{LIGHT_POSITION_METHOD}_{MLIC_SIDE}'
+    suffix = f'{LIGHT_POSITION_METHOD}_{MLIC_SIZE}'
 
     logger = FileLogger(file=os.path.join(MLIC_DIR, f'mlic_{suffix}.log'))
 
@@ -57,7 +53,7 @@ def main():
         calibration=CALIBRATED_1, 
         thresholding=THRESHOLD_1, 
         marker_detector=DETECTOR, 
-        mlic_side=MLIC_SIDE, 
+        mlic_side=MLIC_SIZE, 
         logger=logger
     )
     logger.info(f'Static video stream: {mlic_static}\n')

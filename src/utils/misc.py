@@ -1,5 +1,8 @@
+'''
+This file contains utility functions for miscellaneous tasks.
+'''
+
 import ipywidgets as widgets
-import math
 import time
 from typing import Callable, List, Tuple, TypeVar
 
@@ -8,17 +11,6 @@ from IPython.display import display
 from numpy.typing import NDArray
 
 from src.utils.typing import RGBColor
-
-# _______________________________ TYPING _______________________________
-
-# Type generics
-T = TypeVar('T')
-D = TypeVar('D')
-
-# Default for None with value
-def default(var : T | None, val : D) -> T | D:
-    return val if var is None else var
-
 
 # _______________________________ TIME _______________________________
 class Timer:
@@ -59,21 +51,6 @@ def generate_palette(n: int, palette_type: str = "hsv") -> List[RGBColor]:
         f"Invalid palette_type '{palette_type}'. " 
         f"Available options are: {', '.join(plt.colormaps()[:10])} ... "
     )
-
-# _______________________________ PLOTTING _______________________________
-
-def grid_size(n: int) -> Tuple[int, int]:
-
-    # Start with the square root of the number of images
-    rows = int(math.sqrt(n))
-    cols = math.ceil(n / rows)
-
-    # Adjust rows and cols if necessary
-    while rows * cols < n:
-        rows += 1
-        cols = math.ceil(n / rows)
-    
-    return rows, cols
 
 # ------------------------------ NOTEBOOKS ------------------------------
 

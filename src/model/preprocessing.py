@@ -419,7 +419,7 @@ class ChessboardCameraCalibrator(VideoStream):
             img_points=self._img_points,
             size=self.metadata.size,
             logger=self._logger,
-            params={
+            info={
                 "chessboard_size" : self.chessboard_size,
                 "samples"         : self.samples,
                 "video_file"      : self.path,

@@ -12,9 +12,10 @@ from numpy.typing import NDArray
 
 from src.utils.calibration import CalibratedCamera
 from src.model.thresholding import ThresholdedVideoStream, Thresholding
-from src.utils.typing import Frame, RGBColor, Views, Size2D, LightDirectionMethod, CornerMaskMethod
-from src.utils.misc   import default, generate_palette
+from src.utils.typing import Frame, RGBColor, Views, Size2D, CameraPoseMethod, CornerMaskMethod
+from src.utils.misc   import generate_palette
 from src.utils.io_ import BaseLogger, SilentLogger
+from utils.typing import default
 
 Points2D = Sequence['Point2D']
 
@@ -494,7 +495,7 @@ class Marker:
 
 		return warped
 	
-	def _camera_2d_position_geometric(
+	def _camera_2d_position_algebraic(
 		self, 
 		pixel_points: NDArray,
 		world_points: NDArray,
@@ -533,7 +534,7 @@ class Marker:
 		return R, t_norm
 
 
-	def _camera_2d_position_algebraic(
+	def _camera_2d_position_geometric(
 		self, 
 		pixel_points: NDArray,
 		world_points: NDArray,
@@ -561,7 +562,7 @@ class Marker:
 
 		return R, t[:, 0]
 	
-	def camera_2d_position(self, calibration: CalibratedCamera, method: LightDirectionMethod = 'algebraic', scale: int = 1):
+	def camera_2d_position(self, calibration: CalibratedCamera, method: CameraPoseMethod = 'algebraic', scale: int = 1):
 
 		pixel_points = self.to_corners_array()                               # Marker corner pixels in the image plane c0, c1, c2, c3
 		world_points = self.get_world_points(scale=scale, z=True) # World points ([0, 0, 1]; [W, 0, 1]; [W, H, 1]; [0, H, 1])

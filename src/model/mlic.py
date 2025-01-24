@@ -15,9 +15,10 @@ from src.utils.stream import Stream, SynchronizedVideoStream
 from src.utils.calibration import CalibratedCamera
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
 from src.model.thresholding import Thresholding
-from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor, LightDirectionMethod
+from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor, CameraPoseMethod
 from src.utils.io_ import BaseLogger, SilentLogger
-from src.utils.misc import Timer, default
+from src.utils.misc import Timer
+from utils.typing import default
 
 class MLIC:
 
@@ -297,7 +298,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         thresholding    : Thresholding,
         marker_detector : MarkerDetector,
         name            : str                  = '',
-        method          : LightDirectionMethod = 'algebraic',
+        method          : CameraPoseMethod = 'algebraic',
         plot_history    : bool                 = False,
         logger          : BaseLogger           = SilentLogger(),
         verbose         : bool                 = False,
@@ -316,7 +317,7 @@ class MLICDynamicCameraVideoStream(MarkerDetectionVideoStream):
         self._light_directions       : List[LightDirection] = []
         self._last_processed_frame   : int                  = -1
         self._plot_history           : bool                 = plot_history
-        self._light_direction_method : LightDirectionMethod = method
+        self._light_direction_method : CameraPoseMethod = method
 
     def __str__(self)  -> str: return f"{self.__class__.__name__}[{self.name}, frames: {len(self)}]"
     def __repr__(self) -> str: return str(self)

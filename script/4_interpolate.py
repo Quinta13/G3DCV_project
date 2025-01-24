@@ -4,9 +4,7 @@ from dotenv import load_dotenv
 from src.model.mlic import MLIC
 from src.model.interpolation import RTIRadialBasisInterpolator, MLICBasisInterpolator, RTIPolynomialTextureMapInterpolator
 from src.utils.io_ import IOUtils, FileLogger
-from src.utils.settings import EXP_NAME, INTERPOLATION_DIR, MLIC_FILE_PATH, SPLIT_RATIO
-
-INTERPOLATION_ALGO = 'rbf'
+from src.utils.settings import EXP_NAME, INTERPOLATION_DIR, MLIC_FILE_PATH, SPLIT_RATIO, INTERPOLATION_ALGO
 
 match INTERPOLATION_ALGO:
 
@@ -15,8 +13,8 @@ match INTERPOLATION_ALGO:
 
     case _: raise ValueError(f'Invalid interpolation algorithm {INTERPOLATION_ALGO}. ')
 
-INTERPOLATION_SIZE = (36, 36)
-PROGRESS           = 500
+INTERPOLATION_SIZE = (64, 64)
+PROGRESS           = 5000
 
 if __name__ == "__main__":
 
