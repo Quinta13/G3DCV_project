@@ -333,7 +333,7 @@ class SynchronizedVideoStream:
     # --- MAGIC METHODS ---
     
     def __str__(self) -> str: 
-        return f"SynchronizedVideoStream[{len(self)} streams ({', '.join(self._streams.keys())}); frames: {self._num_frames}]"
+        return f"{self.__class__.__name__}[{len(self)} streams ({', '.join(self._streams.keys())}); frames: {self._num_frames}]"
     
     def __repr__(self) -> str: return str(self)
 

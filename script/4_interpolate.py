@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-from src.model.mlic import MLIC
+from src.model.mlic import MultiLightImageCollection
 from src.model.interpolation import RTIRadialBasisInterpolator, MLICBasisInterpolator, RTIPolynomialTextureMapInterpolator
 from src.utils.io_ import IOUtils, FileLogger
 from src.utils.settings import EXP_NAME, INTERPOLATION_DIR, MLIC_FILE_PATH, SPLIT_RATIO, INTERPOLATION_ALGO
@@ -18,7 +18,7 @@ PROGRESS           = 5000
 
 if __name__ == "__main__":
 
-    mlic_size = MLIC.from_pickle(path=MLIC_FILE_PATH).size[0]
+    mlic_size = MultiLightImageCollection.from_pickle(path=MLIC_FILE_PATH).size[0]
 
     suffix = f'{INTERPOLATION_ALGO}_{mlic_size}'
 
@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     # Loading MLIC
     logger.info(msg='LOADING MLIC')
-    mlic = MLIC.from_pickle(path=MLIC_FILE_PATH, logger=logger)
+    mlic = MultiLightImageCollection.from_pickle(path=MLIC_FILE_PATH, logger=logger)
     logger.info(msg=f'{mlic}\n')
 
     logger.info(msg=f'Splitting MLIC into train and test with ')

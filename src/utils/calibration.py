@@ -82,7 +82,7 @@ class CalibratedCamera:
         if not ret: 
             logger.handle_error(msg="Camera calibration failed. ", exception=RuntimeError)
         else:
-            logger.info(msg=f"Camera calibration completed in {timer} with calibration error: {ret} pixels.")
+            logger.info(msg=f"Camera calibration completed in {timer} with calibration error: {ret} pixels. ")
             if ret > WARN_THRESH: 
                 logger.warning(msg=f"Calibration error is too high (> {WARN_THRESH}). Consider recalibrating the camera.")
 
@@ -194,9 +194,8 @@ class CalibratedVideoStream(VideoStream):
         self, 
         path        : str, 
         calibration : CalibratedCamera, 
-        name        : str               = '',
-        logger      : BaseLogger        = SilentLogger(), 
-        verbose     : bool              = False,
+        name        : str | None        = None,
+        logger      : BaseLogger        = SilentLogger()
     ):
 
         super().__init__(path=path, name=name, logger=logger)

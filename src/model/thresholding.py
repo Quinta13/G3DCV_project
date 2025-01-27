@@ -1,39 +1,57 @@
+'''
+This file contains the main classes to implement thresholding logic on video streams
+'''
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 import cv2 as cv
-from cv2.typing import Size
 
 from src.utils.calibration import CalibratedVideoStream, CalibratedCamera
-from src.utils.io_ import SilentLogger
-from src.utils.typing import Frame, Views
-from src.utils.io_ import BaseLogger
+from src.utils.io_ import SilentLogger, BaseLogger
+from src.utils.typing import Frame, Views, Size2D
+
 
 class Thresholding(ABC):
+    ''' 
+    Abstract class to implement a thresholding on a frame. 
+    It contains an abstract method `__call__` that first converts the frame to grayscale 
+        and then requires the implementation of the thresholding logic in the subclasses.
+    '''
 
     def __init__(self): pass
 
+    def __str__ (self) -> str: return f'{self.__class__.__name__}[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
+    def __repr__(self) -> str: return str(self)
+
+    @property
+    def params(self) -> Dict[str, Any]: return {}
+    ''' Dictionary of thresholding method parameters. '''
+
     @abstractmethod
     def __call__(self, frame: Frame) -> Views: 
+        '''
+        Apply the thresholding logic to the frame and return the views of thresholding processing steps.
+        '''
 
         if len(frame.shape) == 3: frame_g = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
         else:                     frame_g = frame
 
         return {'grayscale': frame_g}
-    
-    def __str__ (self) -> str: return f'{self.name}[{"; ".join([f"{k}: {v}" for k, v in self.params.items()])}]'
-    def __repr__(self) -> str: return str(self)
-    
-    @property
-    def name(self) -> str: return self.__class__.__name__
 
-    @property
-    def params(self) -> Dict[str, Any]: return {}
-    
 class BaseThresholding(Thresholding):
+    ''' 
+    Class to implement a simple thresholding on a frame given a value. 
+    It optionally applies a Gaussian blur before thresholding.
+    '''
 
-    def __init__(self, t: int, kernel_size: Size | None = None):
-        self._t = t
-        self._kernel_size = kernel_size
+    def __init__(self, t: int, gaussian_kernel_size: Size2D | None = None):
+        '''
+        The class requires a threshold value and optionally a Gaussian kernel size. 
+        If not provided, no Gaussian blur is applied.
+        '''
+
+        self._t           : int           = t
+        self._kernel_size : Size2D | None = gaussian_kernel_size
 
     @property
     def params(self) -> Dict[str, Any]: 
@@ -46,11 +64,12 @@ class BaseThresholding(Thresholding):
         return super().params | {'t': self._t} | gaussian_param
     
     def __call__(self, frame: Frame) -> Views:
+        ''' Apply thresholding to the frame. '''
 
         views = super().__call__(frame=frame)
         gray = views['grayscale']
 
-        # Apply Gaussian blur
+        # Optionally apply Gaussian blur
         if self._kernel_size is None:
             frame_blur = gray
             blur_dict = {}
@@ -64,8 +83,11 @@ class BaseThresholding(Thresholding):
         return views | blur_dict | {'binary': frame_b}
 
 class OtsuThresholding(Thresholding):
+    ''' Apply Otsu thresholding to a frame, optionally applying a Gaussian blur before thresholding. '''
 
-    def __init__(self, kernel_size: Size | None = None):
+    def __init__(self, kernel_size: Size2D | None = None):
+        ''' The class optionally applies a Gaussian blur before thresholding. '''
+
         self._kernel_size = kernel_size
 
     @property
@@ -79,11 +101,12 @@ class OtsuThresholding(Thresholding):
         return super().params | gaussian_param
     
     def __call__(self, frame: Frame) -> Views:
+        ''' Apply Otsu thresholding to the frame. '''
 
         views = super().__call__(frame=frame)
         gray = views['grayscale']
 
-        # Apply Gaussian blur
+        # Optionally apply Gaussian blur
         if self._kernel_size is None:
             frame_blur = gray
             blur_dict = {}
@@ -95,34 +118,58 @@ class OtsuThresholding(Thresholding):
         # NOTE: thresh = 0 is ignored in Otsu's method
         _, frame_b = cv.threshold(src=frame_blur, thresh=0, maxval=255, type=cv.THRESH_BINARY + cv.THRESH_OTSU)
 
-        return views |blur_dict | {'binary': frame_b} 
+        return views | blur_dict | {'binary': frame_b} 
 
 class TopHatOtsuThresholding(Thresholding):
+    ''' Apply top hat transform and Otsu thresholding to a frame. '''
 
-    def __init__(self, kernel_size: Size, kernel_shape: int = cv.MORPH_ELLIPSE):
-        self._kernel_size  = kernel_size
-        self._kernel_shape = kernel_shape
+    def __init__(self, se_size: Size2D, se_shape: int = cv.MORPH_ELLIPSE):
+        ''' 
+        The class requires a structuring element size and shape for the top hat transform.
+        The default shape is an ellipse.
+        '''
+
+        self._se_size  = se_size
+        self._se_shape = se_shape
 
     @property
-    def params(self) -> Dict[str, Any]: return {'top hat kernel size': f'{self._kernel_size[0]}x{self._kernel_size[1]}'}
+    def params(self) -> Dict[str, Any]: 
+
+        w, h = self._se_size
+        
+        morph_shape: str = {
+            cv.MORPH_RECT    : 'rectangle',
+            cv.MORPH_CROSS   : 'cross',
+            cv.MORPH_ELLIPSE : 'ellipse'
+        }[self._se_shape]
+        
+        return {
+            'structuring element shape': morph_shape,
+            'structuring element size' : f'{w}x{h}'
+        }
 
     def __call__(self, frame: Frame) -> Views:
+        ''' Apply top hat transform and Otsu thresholding to the frame. '''
 
         views = super().__call__(frame=frame)
         gray = views['grayscale']
 
         # Apply top hat transform
-        kernel   = cv.getStructuringElement(shape=self._kernel_shape, ksize=self._kernel_size)
+        kernel   = cv.getStructuringElement(shape=self._se_shape, ksize=self._se_size)
         frame_th = cv.morphologyEx(src=gray, op=cv.MORPH_TOPHAT, kernel=kernel, iterations=1)
 
         # Otsu thresholding
-        tresh, frame_b = cv.threshold(frame_th, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+        # NOTE: thresh = 0 is ignored in Otsu's method
+        _, frame_b = cv.threshold(src=frame_th, thresh=0, maxval=255, type=cv.THRESH_BINARY + cv.THRESH_OTSU)
 
         return views | {'top-hat': frame_th, 'binary': frame_b}
-    
+
 class AdaptiveThresholding(Thresholding):
+    ''' Apply adaptive thresholding to a frame. '''
 
     def __init__(self, block_size: int, c: int):
+        ''' The class requires a block size and a constant value for adaptive thresholding. '''
+
         self._block_size = block_size
         self._c = c
 
@@ -130,6 +177,7 @@ class AdaptiveThresholding(Thresholding):
     def params(self) -> Dict[str, Any]: return {'block size': self._block_size, 'c': self._c}
 
     def __call__(self, frame: Frame) -> Views:
+        ''' Apply adaptive thresholding to the frame. '''
 
         views = super().__call__(frame=frame)
         gray = views['grayscale']
@@ -147,31 +195,37 @@ class AdaptiveThresholding(Thresholding):
         return views | {'binary': frame_b}
 
 class ThresholdedVideoStream(CalibratedVideoStream):
+    ''' Video stream with a thresholding method applied to the frames. '''
 
     def __init__(
         self, 
         path        : str, 
         calibration : CalibratedCamera,
         thresholding: Thresholding,
-        name        : str        = '',
-        logger      : BaseLogger = SilentLogger(),
-        verbose     : bool       = False
+        name        : str | None = None,
+        logger      : BaseLogger = SilentLogger()
     ):
+        ''' The class requires the thresholding method to apply to the frames. '''
 
-        super().__init__(path=path, calibration=calibration, name=name, logger=logger, verbose=verbose)
+        super().__init__(path=path, calibration=calibration, name=name, logger=logger)
 
         self._thresholding: Thresholding = thresholding
 
     @property
-    def _str_name(self) -> str: return f'{self._thresholding.name}VideoStream'
+    def _str_name(self) -> str: return f'{self._thresholding.__class__.__name__}VideoStream'
 
     @property
     def _str_params(self) -> Dict[str, Any]: return super()._str_params | self._thresholding.params
 
     def _process_frame(self, frame: Frame, frame_id: int) -> Views:
+        ''' Process the frame using the thresholding method. '''
 
+        # Get previous processing steps
         views = super()._process_frame(frame=frame, frame_id=frame_id)
         calibrated_frame = views['undistorted']
+        
+        # Apply thresholding to the undistorted frame
         thresh_views = self._thresholding(frame=calibrated_frame)
 
+        # Return old views and new thresholding views
         return views | thresh_views

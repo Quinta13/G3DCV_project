@@ -38,7 +38,7 @@ def main():
     logger.info(msg=str(video_syncer))
     logger.info(msg='')
 
-    stream1, stream2 = video_syncer.sync()
+    stream1, stream2 = video_syncer()
 
     # Playing synced videos
     logger.info(msg=f'PLAYING SYNCED VIDEOS')

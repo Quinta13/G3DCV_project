@@ -1,28 +1,33 @@
-import math
+'''
+This file contains two classes for the main preprocessing tasks of the project:
+    - VideoSync: Synchronize two videos by aligning their audio signals.
+    - ChessboardCameraCalibrator: Calibrate a camera using a video stream by detecting chessboard corners.
+'''
+
 import os
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
+import ffmpeg
 import numpy as np
+import cv2 as cv
 import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 from scipy.signal import correlate
-import ffmpeg
-import cv2 as cv
-
 
 from src.utils.typing import Size2D
 from src.utils.calibration import CalibratedCamera
 from src.utils.stream import VideoStream
 from src.utils.io_ import (
+    BaseLogger, SilentLogger,
     PathUtils, AudioFile, VideoFile
+
 )
 from src.utils.misc import Timer
-from src.utils.io_ import SilentLogger
-from src.utils.io_ import BaseLogger
 
 
 class VideoSync:
+    ''' Synchronize two videos by aligning their audio signals. '''
 
     AUDIO_EXT = 'wav'
 
@@ -32,17 +37,20 @@ class VideoSync:
         video2        : VideoFile,
         out_dir       : str, 
         out_video_ext : str        = 'mp4',
-        logger        : BaseLogger = SilentLogger(),
-        verbose       : bool       = False
+        logger        : BaseLogger = SilentLogger()
     ):
         '''
         Receive in input two video files to synchronize and an output directory to save the synchronization data.
+        
+        :param video1: First video file to synchronize.
+        :param video2: Second video file to synchronize.
+        :param out_dir: Output directory to save the synchronized videos.
+        :param out_video_ext: Output video extension.
+        :param logger: Logger to display messages.
         '''
 
         # Logger
         self._logger        : BaseLogger = logger
-        self._logger_verbose: BaseLogger = logger if verbose else SilentLogger()
-        self._is_verbose    : bool       = verbose
 
         # Check if the videos refer to the same experiment - i.e. have the same name
         exp1 = PathUtils.get_file_name(video1.path)
@@ -63,12 +71,8 @@ class VideoSync:
 
     # --- MAGIC METHODS ---
 
-    def __str__(self) -> str:
-        return f"{self.__class__.__name__}[{self.exp_name}]"
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
+    def __str__(self)  -> str: return f"{self.__class__.__name__}[{self.exp_name}]"
+    def __repr__(self) -> str: return self.__str__()
 
     # --- PROPERTIES ---
 
@@ -81,34 +85,36 @@ class VideoSync:
     @property
     def out_dir(self) -> str: return self._out_dir
 
-
     # --- SYNC METHODS ---
 
-    def sync(self) -> Tuple[VideoStream, VideoStream]:
+    def __call__(self) -> Tuple[VideoStream, VideoStream]:
+        '''
+        Synchronize the two videos by aligning their audio signals by following these steps:
+            1. Extract audio from the videos.
+            2. Calculate the offset between the two audio signals.
+            3. Trim the videos to the same length by applying the computed offset.
+        '''
 
         timer = Timer()
 
         # Synchronization process
         self._logger.info(msg=f"SYNCING VIDEOS: ")
         self._logger.info(msg=f" > 1. {self._video1}")
-        self._logger.info(msg=f" > 2. {self._video2}")
-        self._logger.info(msg=f"")
+        self._logger.info(msg=f" > 2. {self._video2}\n")
 
-        # Extract audio from the videos
+        # 1. Extract audio from the videos
         self._logger.info(msg="EXTRACTING AUDIO FROM VIDEOS")
         audio1, audio2 = self._extract_audio()
         self._logger.info(msg='')
     
-        # Calculate the offset between the two audio signals
+        # 2. Calculate the offset between the two audio signals
         self._logger.info(msg="CALCULATING AUDIO SIGNALS OFFSET")
         offset = self.calculate_sync_offset(audio1=audio1, audio2=audio2)
-        self._logger.info(msg=f"Calculated offset: {offset} seconds.")
-        self._logger.info(msg='')
+        self._logger.info(msg=f"Calculated offset: {offset} seconds.\n")
 
         # Plot audio signals before and after computed alignment
         self._logger.info(msg="PLOTTING AUDIO SIGNALS")
         for off, title in zip([0., offset], ['Original', 'Aligned']):
-
             self.plot_aligned_audio(
                 audio1=audio1,
                 audio2=audio2,
@@ -119,8 +125,8 @@ class VideoSync:
             )
         self._logger.info(msg='')
         
-        # Save trimmed audios
-        self._logger.info(msg="TRIMMING AUDIO SIGNALS")
+        # 3. Save trimmed videos
+        self._logger.info(msg="TRIMMING VIDEO")
         video1_out, video2_out = self.trim_video(
             video1=self._video1,
             video2=self._video2,
@@ -132,7 +138,7 @@ class VideoSync:
         self._logger.info(msg='')
 
         # Log synchronization completion
-        self._logger.info(msg=f"SYNC COMPLETED in {timer}.")
+        self._logger.info(msg=f"SYNC COMPLETED in {timer}. ")
         self._logger.info(msg=f"")
 
         # Log synced videos
@@ -140,27 +146,26 @@ class VideoSync:
         self._logger.info(msg=f" > 1. {video1_out}")
         self._logger.info(msg=f" > 2. {video2_out}")
 
+
+        # In the case there is still a frame difference, warn about the frame difference
         frame_difference = video1_out.metadata.duration - video2_out.metadata.duration
-
         if frame_difference != 0:
-
             self._logger.warning(
                 msg=f"After trimming videos have different number of frames: "\
-                    f"{video1_out.metadata.frames} and {video2_out.metadata.frames}. "\
+                    f"{video1_out.metadata.frames} and {video2_out.metadata.frames}.\n"\
             )
-
-        else :
-            self._logger.info(msg=f"Trimmed videos have the same number of frames: {video1_out.metadata.frames}.")
-
-        self._logger.info(msg=f"")
+        else:
+            self._logger.info(msg=f"Trimmed videos have the same number of frames: {video1_out.metadata.frames}.\n")
 
         return (
             VideoStream(path=video1_out.path),
             VideoStream(path=video2_out.path),
         )
-
+    
     def _extract_audio(self) -> Tuple[AudioFile, AudioFile]:
-        ''' Extract audio from the two videos with the same sample rate. '''
+        ''' 
+        Synchronization utility for step 1. Extract audio from the two videos with the same sample rate.
+        '''
 
         # Compute the minimum sample rate
         self._logger.info(msg="Videos sampling rates: ")
@@ -173,7 +178,8 @@ class VideoSync:
         audios: List[AudioFile] = []
 
         for video in [self._video1, self._video2]:
-
+            
+            # Log extraction
             self._logger.info(msg=f"")
             self._logger.info(msg=f"Extracting {video.name} ...")
             self._logger.formatter = lambda x: f' - {x}'
@@ -194,7 +200,7 @@ class VideoSync:
 
             self._logger.reset_formatter()
 
-        audio1, audio2 = audios
+        audio1, audio2 = audios  # NOTE: Unpack for the type checker to ensure tuple of two elements
         return audio1, audio2
     
     @staticmethod
@@ -203,7 +209,7 @@ class VideoSync:
             audio2: AudioFile,
             logger: BaseLogger = SilentLogger()
         ) -> float:
-        ''' Computes the offset between two audio signals. '''
+        ''' Synchronization utility for step 2. Computes the offset between two audio signals. '''
 
         # Ensure the sample rates are the same
         if audio1.rate != audio2.rate:
@@ -230,7 +236,7 @@ class VideoSync:
         save_path : str   = '',
         logger    : BaseLogger = SilentLogger()
     ):
-        ''' Plots the aligned audio signals by applying an offset. '''
+        ''' Synchronization utility for step 2. Plots the audio tracks signals by applying an offset. '''
         
         # Ensure the sample rates are the same
         if audio1.rate != audio2.rate:
@@ -245,9 +251,10 @@ class VideoSync:
         # Padding for signal alignment
         pad1, pad2 = (0, offset_samples), (offset_samples, 0)
 
-        if offset < 0:
-            pad1, pad2 = pad2, pad1
+        # Swap to make first signal longer
+        if offset < 0: pad1, pad2 = pad2, pad1
         
+        # Pad signals
         data1 = np.pad(audio1.data, pad1, mode='constant')
         data2 = np.pad(audio2.data, pad2, mode='constant')
         
@@ -265,7 +272,6 @@ class VideoSync:
         # Plot signals
         ax.plot(time, data2, label=audio2.name, color='orange', alpha=.6)
         ax.plot(time, data1, label=audio1.name, color='blue',   alpha=.6)
-        
         ax.set_title(title)
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Amplitude')
@@ -286,7 +292,7 @@ class VideoSync:
         out_video_ext : str        = 'mp4',
         logger        : BaseLogger = SilentLogger()
     ) -> Tuple[VideoFile, VideoFile]:
-        ''' Trims the video signals to the same length by applying an offset derived from the sync time. '''
+        ''' Sync utility for step 3. Trims the video signals to the same length by applying an offset derived from the sync time. '''
 
         # Use longest video as `video1`
         if video1.metadata.duration < video2.metadata.duration:
@@ -303,14 +309,17 @@ class VideoSync:
 
         out_video_paths = []
 
+        # Convert videos
         for video, sync in zip([video1, video2], [sync_time, 0]):
 
             logger.info(msg=f'Converting video {video.name}')
 
+            # Extract camera name and output path
             camera_name = PathUtils.get_folder_name(video.path)
             out_video_path = os.path.join(out_path, f'{camera_name}.{out_video_ext}')
             out_video_paths.append(out_video_path)
 
+            # FFmpeg command
             cmd = (
                 ffmpeg
                 .input(video.path, ss=sync) 
@@ -332,6 +341,7 @@ class VideoSync:
             
             logger.info(msg=f'')
 
+        # Read trimmed videos and output
         logger.info(msg=f'Reading trimmed videos ...')
         out_video_path_1, out_video_path_2 = out_video_paths
         video1_trimmed = VideoFile(path=out_video_path_1, logger=logger)
@@ -339,38 +349,56 @@ class VideoSync:
 
         return video1_trimmed, video2_trimmed
 
+
 class ChessboardCameraCalibrator(VideoStream):
-    ''' Class to calibrate a camera using from video stream by detecting chessboard corners. '''
+    '''
+    Class to calibrate a camera using from video stream by detecting chessboard corners. 
+    The calibration is a stream subclass applying chessboard corner detection to collect image points.
+    '''
+
+    # --- INITIALIZATION ---
 
     def __init__(
             self, 
             path            : str, 
             chessboard_size : Size2D,
             samples         : int,
-            logger          : BaseLogger = SilentLogger(), 
-            verbose         : bool       = False
+            logger          : BaseLogger = SilentLogger()
         ):
         '''
         The initialization requires the chessboard size and the number of samples to use for calibration.
         '''
 
-        super().__init__(path=path, logger=logger, verbose=verbose)
+        super().__init__(path=path, logger=logger)
 
-        self._chessboard_size: Size2D = chessboard_size
-        self._samples:         int  = samples
-
+        self._chessboard_size : Size2D = chessboard_size
+        self._samples         : int    = samples
         self._reset_img_points()
 
     def _reset_img_points(self): self._img_points: List[NDArray] = []
     ''' Reset the collection of image points. '''
 
+    # --- PROPERTIES ---
+
+    @property
+    def chessboard_size(self) -> Size2D: return self._chessboard_size
+
+    @property
+    def samples(self) -> int: return self._samples
+
+    @property
+    def _str_params(self) -> Dict[str, Any]: 
+        ''' Utility function for string representation.'''
+        
+        return super()._str_params | {'chessboard_size': self.chessboard_size, 'samples': self.samples}
+    
     @property
     def obj_point(self) -> NDArray:
         ''' Return the real world coordinates of the chessboard corners. '''
 
         h, w = self._chessboard_size
 
-        # h x w x 3 matrix
+        # H x W x 3 matrix
         obj_point = np.zeros((h * w, 3), np.float32)
 
         # Grid coordinates for the chessboard (the square has a size of 1)
@@ -380,38 +408,33 @@ class ChessboardCameraCalibrator(VideoStream):
         return obj_point
     
     @property
-    def chessboard_size(self) -> Size2D: return self._chessboard_size
-
-    @property
-    def samples(self) -> int: return self._samples
-
-    @property
     def skip_frames(self) -> int: return len(self) // self.samples
     ''' The sample frames are equally spaced in the video stream. '''
-    
-    def __str__(self) -> str:
 
-        h, w = self.chessboard_size
-
-        return f"{self.__class__.__name__}[{self.name}; "\
-            f"chessboard size={h}x{w}; "\
-            f"samples={self.samples}; "\
-            f"skip frames={self.skip_frames}) "\
+    # --- CALIBRATION ---
     
-    def calibrate(self, window_size: Dict[str, Size2D] | Size2D | None = None) -> CalibratedCamera:
-        ''' Calibrate the camera using the collected image points. '''
+    def calibrate(
+        self, 
+        window_size: Dict[str, Size2D] | Size2D | None = None
+    ) -> CalibratedCamera:
+        '''
+        Calibrate the camera using the collected image points. 
+        In the streaming logic no view (raw and chessboard detected) is detected
+        '''
 
         self._reset_img_points()
 
         # Collect image points
-        self._logger.info(msg=f"Collecting image point for camera using {self.samples} samples ... ")
         timer = Timer()
+
+        # NOTE: We start from self.skip_frames and not from 0 otherwise we would collect one point more
+        self._logger.info(msg=f"Collecting image point for camera using {self.samples} samples ... ")
         self.play(start=self.skip_frames, skip_frames=self.skip_frames, window_size=window_size)
-        self._logger.info(msg=f'Completed in {timer}. Collected samples: {len(self._img_points)}.')
+        self._logger.info(msg=f'Completed in {timer}. Collected samples: {len(self._img_points)}. ')
 
         # Compute object points
         object_point = self.obj_point
-        object_points = [object_point] * len(self._img_points)
+        object_points = [object_point] * len(self._img_points)  # NOTE: They are the same for all the samples
 
         # Calibrate the camera
         return CalibratedCamera.from_points(
@@ -426,29 +449,19 @@ class ChessboardCameraCalibrator(VideoStream):
             }
         )
     
+    # --- STREAM PROCESSING ---
 
     def _process_frame(self, frame: NDArray, frame_id: int) -> Dict[str, NDArray]:
 
-        corners = self._find_chessboard_corners(frame=frame)
+        views = super()._process_frame(frame=frame, frame_id=frame_id)
 
-        if corners is not None:
+        raw_frame = views['raw']
 
-            self._img_points.append(corners)
-            frame_ = cv.drawChessboardCorners(frame.copy(), self._chessboard_size, corners, True)
-    
-        else:
-            
-            frame_ = frame
-            if not self._is_debug(frame_id=frame_id): self._logger.warning(msg=f"[{self.name}] Unable to find chessboard in frame {frame_id}")
+        # Convert to grayscale and Find chessboard corners
+        gray = cv.cvtColor(raw_frame, cv.COLOR_RGB2GRAY)
+        ret, corners = cv.findChessboardCorners(gray, self.chessboard_size, None)
 
-        return {'calibration': frame_} | super()._process_frame(frame=frame, frame_id=frame_id)
-    
-    def _find_chessboard_corners(self, frame: NDArray) -> NDArray | None:
-
-        gray = cv.cvtColor(frame, cv.COLOR_RGB2GRAY)
-
-        ret, corners = cv.findChessboardCorners(gray, self._chessboard_size, None)
-
+        # Success: save the corners and draw them on the frame
         if ret:
 
             # Enhance the precision of the found corners
@@ -458,6 +471,15 @@ class ChessboardCameraCalibrator(VideoStream):
                 criteria=(cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
             )
 
-            return corners_refined
+            self._img_points.append(corners_refined)
+            frame_ = cv.drawChessboardCorners(frame.copy(), self._chessboard_size, corners_refined, True)
+    
+        # Failure: use the original frame and warn about the missing chessboard
+        else:
 
-        return None
+            frame_ = frame
+            if not self._is_debug(frame_id=frame_id): 
+                self._logger.warning(msg=f"[{self.name}] Unable to find chessboard in frame {frame_id}")
+
+        return views | {'calibration': frame_}
+    

@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 from scipy.interpolate import Rbf
 
 from src.utils.typing import Shape, Frame
-from src.model.mlic import MLIC
+from src.model.mlic import MultiLightImageCollection
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer
 
 class BasisInterpolation:
@@ -217,10 +217,16 @@ class BasisInterpolationCollection:
 	def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'BasisInterpolationCollection':
 		''' Load camera calibration from a pickle file. '''
 
-		logger.info(msg=f"Loading camera calibration from {path}")
-		with open(path, 'rb') as f: return pickle.load(f)
+		logger.info(msg=f"Loading basis interpolation from {path}")
+
+		timer = Timer()
+		with open(path, 'rb') as f: data = pickle.load(f)
+		logger.info(msg=f"Completed in {timer}. ")
+
+		return data
+
 	
-	def mse_error(self, mlic: MLIC) -> float:
+	def mse_error(self, mlic: MultiLightImageCollection) -> float:
 
 		errors = []
 
@@ -237,20 +243,17 @@ class BasisInterpolationCollection:
 	def dump(
         self,
         path   : str,
-        logger : BaseLogger = SilentLogger(),
-        verbose: bool       = False
+        logger : BaseLogger = SilentLogger()
     ) -> None:
 		''' Save the camera calibration to a pickle file. '''
 
-		logger_verbose = logger if verbose else SilentLogger()
-
-		ISUtils.check_output(path=PathUtils.get_folder_path(path=path), logger=logger_verbose)
+		ISUtils.check_output(path=PathUtils.get_folder_path(path=path), logger=logger)
 
 		logger.info(msg=f"Saving basis interpolation collection to {path} ...")
 
 		timer = Timer()
 		with open(path, 'wb') as f: pickle.dump(self, f)
-		logger.info(msg=f"Completed in {timer}")
+		logger.info(msg=f"Completed in {timer}. ")
 
 class BasisInterpolator(ABC):
     
@@ -379,18 +382,15 @@ class MLICBasisInterpolator:
     
 	def __init__(
 		self,
-		mlic: MLIC,
+		mlic: MultiLightImageCollection,
 		C_rti_interpolator: Type[RTIBasisInterpolator],
 		interpolation_size: Tuple[int, int],
-		logger: BaseLogger = SilentLogger(),
-		verbose: bool = False
+		logger: BaseLogger = SilentLogger()
 	):
 		
 		self._logger         : BaseLogger = logger
-		self._logger_verbose : BaseLogger = logger if verbose else SilentLogger()
-		self._is_verbose     : bool       = verbose
 
-		self._mlic               : MLIC                 = mlic
+		self._mlic               : MultiLightImageCollection                 = mlic
 		self._interpolation_size : Tuple[int, int]      = interpolation_size
 		self._rti_interpolator   : RTIBasisInterpolator = C_rti_interpolator(coordinates=self._mlic.light_directions, interpolation_size=self._interpolation_size)
 	
@@ -421,7 +421,7 @@ class MLICBasisInterpolator:
 		self._logger.info(msg=f'Starting interpolation for all pixels ({tot}). ')
 
 		if save_dir:
-			ISUtils.check_output(path=save_dir, logger=self._logger_verbose)
+			ISUtils.check_output(path=save_dir, logger=self._logger)
 			self._logger.info(msg=f'Saving plots to {save_dir}. ')
 
 		timer = Timer()
@@ -447,6 +447,6 @@ class MLICBasisInterpolator:
 			#	fig.savefig(os.path.join(save_dir, f'pixel_{pixel}.png'))
 			#	plt.close(fig)
 		
-		self._logger.info(msg=f'Interpolation completed in {timer} . ')
+		self._logger.info(msg=f'Interpolation completed in {timer}. ')
 
 		return BasisInterpolationCollection(basis_interpolations=interpolated_basis, out_shape=self._mlic.size)
