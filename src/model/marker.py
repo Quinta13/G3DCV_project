@@ -1054,6 +1054,7 @@ class MarkerDetector:
 		# vertex index, circle contour
 		marker_circles: List[Tuple[int, Contour]] = []
 
+		# Mask to show every anchor found
 		out_mask: Frame = np.zeros_like(a=frame, dtype=np.uint8)
 
 		for contour in contours:
@@ -1070,7 +1071,7 @@ class MarkerDetector:
 			for corner_id, (inner_corner, outer_corner) in enumerate(zip(inner_vert.vertices, outer_vert.vertices)):
 
 				# Check if the anchor is between the two points
-				is_anchor, mask = is_contour_between_points(
+				is_anchor, anchor_mask = is_contour_between_points(
 					anchor_contour=contour, 
 					inner_corner=Point2D.from_tuple(inner_corner), 
 					outer_corner=Point2D.from_tuple(outer_corner)
@@ -1080,7 +1081,7 @@ class MarkerDetector:
 				# add it to the list of marker circles
 				if is_anchor:
 					marker_circles.append((corner_id, contour))
-					out_mask: Frame = mask | out_mask             # type: ignore - or is supported for numpy arrays
+					out_mask: Frame = anchor_mask | out_mask # Update the mask with the anchor found # type: ignore
 		
 		anchor_view = {'anchor_mask': out_mask}
 

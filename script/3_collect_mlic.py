@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import numpy as np
 
 from src.model.marker import MarkerDetector
-from src.model.mlic import DynamicCameraVideoStream, StaticCameraVideoStream, MLICCollector
+from src.model.mlic import DynamicCameraVideoStream, StaticCameraVideoStream, MultiLightImageCollector
 from src.model.thresholding import AdaptiveThresholding, OtsuThresholding
 from src.utils.io_ import FileLogger, IOUtils, VideoFile
 from src.utils.calibration import CalibratedCamera
@@ -53,7 +53,7 @@ def main():
         calibration=CALIBRATED_1, 
         thresholding=THRESHOLD_1, 
         marker_detector=DETECTOR, 
-        mlic_size=MLIC_SIZE, 
+        mlic_size=(MLIC_SIZE, MLIC_SIZE), 
         logger=logger
     )
     logger.info(f'Static video stream: {mlic_static}\n')
@@ -70,7 +70,7 @@ def main():
     logger.info(f'Dynamic video stream: {mlic_dynamic}\n')
 
     # Synchronize streams
-    mlic_collector = MLICCollector(mlic_static=mlic_static, mlic_dynamic=mlic_dynamic, logger=logger)
+    mlic_collector = MultiLightImageCollector(mlic_static=mlic_static, mlic_dynamic=mlic_dynamic, logger=logger)
 	
     logger.info('STARTING MLIC COLLECTION.')
     mlic = mlic_collector.collect(skip_frames=SKIP_FRAMES, win_rect=(CAMERA_1_WINSIZE, CAMERA_2_WINSIZE), win_square=SQUARE_WINSIZE)

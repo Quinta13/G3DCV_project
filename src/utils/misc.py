@@ -4,11 +4,12 @@ This file contains utility functions for miscellaneous tasks.
 
 import ipywidgets as widgets
 import time
-from typing import Callable, List, Tuple, TypeVar
+from typing import Callable, List, Tuple
 
 import matplotlib.pyplot as plt
 from IPython.display import display
 from numpy.typing import NDArray
+import cv2 as cv
 
 from src.utils.typing import RGBColor
 
@@ -68,7 +69,12 @@ def launch_widget(widgets_: List[widgets.Widget], update_fn: Callable):
     display(*widgets_)            # Display widgets
     update_fn(change={'new': 0})  # Trigger initial update
 
-def display_frame_views(views: List[Tuple[str, NDArray]], n_rows: int = 1, figsize: Tuple[int, int] = (10, 10)):
+def display_frame_views(
+        views: List[Tuple[str, NDArray]],
+        n_rows: int = 1, 
+        figsize: Tuple[int, int] = (10, 10),
+        to_rgb: bool = False,
+    ):
     ''' Display a list of frames with the specified titles. '''
 
     # Calculate the number of columns
@@ -76,6 +82,8 @@ def display_frame_views(views: List[Tuple[str, NDArray]], n_rows: int = 1, figsi
     plt.figure(figsize=figsize)
     
     for i, (title, frame) in enumerate(views):
+
+        if to_rgb: frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
     
         plt.subplot(n_rows, n_cols, i + 1)
         plt.imshow(frame, cmap='gray')

@@ -4,11 +4,15 @@ and creates the file paths for directories and files used in the project.
 '''
 
 import os
+from typing import Tuple
 from dotenv import load_dotenv
 
 from src.utils.typing import CameraPoseMethod
 
 load_dotenv(r'.env', override=True)
+
+def parse_tuple(tuple_str: str) -> Tuple[int, ...]:
+    return tuple(map(int, tuple_str.strip('()').split(',')))
 
 # ________________ Environment Variables from .env ________________
 
@@ -26,9 +30,16 @@ INTERPOLATION_ALGO    : str              = os.getenv('INTERPOLATION_ALGO',    ''
 LIGHT_POSITION_METHOD : CameraPoseMethod = os.getenv('LIGHT_POSITION_METHOD', '')  # type: ignore
 
 MLIC_SIZE   : int   = int  (os.getenv('MLIC_SIZE',    0))
-BASIS_SIZE  : int   = int  (os.getenv('BASIS_SIZE',   0))
+SAMPLES     : int   = int  (os.getenv('SAMPLES',      0))
 SPLIT_RATIO : float = float(os.getenv('SPLIT_SIZE',   0))
 
+_CHESSBOARD_SIZE: Tuple[int, ...] = parse_tuple(os.getenv('CHESSBOARD_SIZE', ''))
+assert len(_CHESSBOARD_SIZE) == 2, 'CHESSBOARD_SIZE must be a tuple of 2 integers.'
+CHESSBOARD_SIZE: Tuple[int, int] = _CHESSBOARD_SIZE
+
+_INTERPOLATION_SIZE: Tuple[int, ...] = parse_tuple(os.getenv('INTERPOLATION_SIZE', ''))
+assert len(_INTERPOLATION_SIZE) == 2, 'INTERPOLATION_SIZE must be a tuple of 2 integers.'
+INTERPOLATION_SIZE: Tuple[int, int] = _INTERPOLATION_SIZE
 
 # ___________________________________ File Paths ___________________________________
 

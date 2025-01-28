@@ -112,7 +112,6 @@ class CalibratedCamera:
         distortion_coeffs = np.zeros((1, 5))
 
         info = {
-            "reprojection_error": None,
             "from_trivial_size" : size
         }
 
@@ -141,10 +140,7 @@ class CalibratedCamera:
         dist_str = "Distortion Coefficients\n"
         dist_str += " | ".join(f"{val:.6f}" for val in self.distortion_coeffs[0]) + "\n"
 
-        # Mean Reprojection Error
-        error_str = f"Mean Pixel Error: {self.info.get('reprojection_error', None)}\n"
-
-        return f"{K_str}\n{dist_str}\n{error_str}"
+        return f"{K_str}\n{dist_str}\n"
 
     def __repr__(self) -> str: return str(self)
 

@@ -1,25 +1,21 @@
 import os
-from dotenv import load_dotenv
 
 from src.model.mlic import MultiLightImageCollection
-from src.model.interpolation import RTIRadialBasisInterpolator, MLICBasisInterpolator, RTIPolynomialTextureMapInterpolator
+from src.model.interpolation import MLICRadialBasisInterpolator, MLICBasisCollectionInterpolator, RTIPolynomialTextureMapInterpolator
 from src.utils.io_ import IOUtils, FileLogger
-from src.utils.settings import EXP_NAME, INTERPOLATION_DIR, MLIC_FILE_PATH, SPLIT_RATIO, INTERPOLATION_ALGO
+from src.utils.settings import EXP_NAME, INTERPOLATION_DIR, MLIC_FILE_PATH, SPLIT_RATIO, INTERPOLATION_ALGO, INTERPOLATION_SIZE
+
+PROGRESS = 5000
 
 match INTERPOLATION_ALGO:
-
-    case 'rbf': rti_interpolation = RTIRadialBasisInterpolator
+    case 'rbf': rti_interpolation = MLICRadialBasisInterpolator
     case 'ptm': rti_interpolation = RTIPolynomialTextureMapInterpolator
+    case _    : raise ValueError(f'Invalid interpolation algorithm {INTERPOLATION_ALGO}. ')
 
-    case _: raise ValueError(f'Invalid interpolation algorithm {INTERPOLATION_ALGO}. ')
-
-INTERPOLATION_SIZE = (64, 64)
-PROGRESS           = 5000
 
 if __name__ == "__main__":
 
     mlic_size = MultiLightImageCollection.from_pickle(path=MLIC_FILE_PATH).size[0]
-
     suffix = f'{INTERPOLATION_ALGO}_{mlic_size}'
 
     # Output directory
@@ -39,7 +35,7 @@ if __name__ == "__main__":
 
     # Creating MLIC interpolator
     logger.info('CREATING MLIC INTERPOLATOR')
-    mlic_bi = MLICBasisInterpolator(
+    mlic_bi = MLICBasisCollectionInterpolator(
         mlic=mlic_train,
         C_rti_interpolator=rti_interpolation,
         interpolation_size=INTERPOLATION_SIZE,

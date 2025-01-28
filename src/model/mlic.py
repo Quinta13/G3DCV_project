@@ -1,7 +1,27 @@
+'''
+Class to model the Multi-Light Image Collection (MLIC) dataset and how to collect it from the static and dynamic camera streams.
+
+The file is composed of MLIC class and some utility classes to handle the MLIC collection and streaming.
+
+    - MultiLightImageCollection: Class representing a Multi-Light Image Collection (MLIC)
+        composed of a set of object frames and their corresponding light directions.
+    - MultiLightImageCollectionStream: Class for streaming the Multi-Light Image Collection, 
+        providing the synchronized view of the object frames and the source light directions.
+    - MultiLightImageCollectionAccumulator: Class used to accumulate the object frames and light directions processed by the video streams, 
+        and to convert them into a Multi-Light Image Collection.
+
+It further includes the classes to handle the video streams from the static and dynamic cameras.
+
+    - StaticCameraVideoStream: Class to process the video stream from a static camera, detect the marker, and warp the frame to a square image.
+    - DynamicCameraVideoStream: Class to process the video stream from a dynamic camera, detect the marker, and estimate the camera pose, that is approximately the same as the light direction.
+    - MLICCollector: Class to synchronize the video streams of static and dynamic camera and collect the object frames and light directions in the accumulator,
+        then convert the accumulator to a Multi-Light Image Collection.
+'''
+
 from __future__ import annotations
 
 import pickle
-from typing import Dict, Iterator, List, Sequence, Tuple
+from typing import Dict, Iterator, List, Tuple
 
 import cv2 as cv
 import numpy as np
@@ -18,7 +38,7 @@ from src.utils.io_ import (
 )
 from src.utils.misc import Timer
 
-# --- MLIC ---
+# __________________________________ MLIC __________________________________
 
 class MultiLightImageCollection:
     '''
@@ -208,7 +228,6 @@ class MultiLightImageCollection:
 
         return MultiLightImageCollectionStream(mlic=self, name=name, logger=logger)
 
-
 class MultiLightImageCollectionStream(Stream):
     ''' Class for streaming the Multi-Light Image Collection, providing the synchronized view of the object frames and the source light directions. '''
 
@@ -314,7 +333,7 @@ class MultiLightImageCollectionAccumulator:
             uv_means=(obj_frames_u_mean, obj_frames_v_mean)
         )
 
-# --- CAMERA STREAMS ---
+# __________________________________ CAMERA STREAMS __________________________________
 class StaticCameraVideoStream(MarkerDetectionVideoStream):
     '''
     The Static Camera Processing is responsible to process the video stream from a static camera,
@@ -572,7 +591,11 @@ class DynamicCameraVideoStream(MarkerDetectionVideoStream):
 
         return img
 
-class MLICCollector(SynchronizedVideoStream):
+class MultiLightImageCollector(SynchronizedVideoStream):
+    ''' 
+    Class that combines the processing of the static and dynamic camera streams to collect the object frames 
+        and light directions and convert them into a Multi-Light Image Collection.
+    '''
 
     def __init__(
         self,
@@ -581,7 +604,7 @@ class MLICCollector(SynchronizedVideoStream):
         logger       : BaseLogger = SilentLogger()
     ):
         ''' 
-        Initialize the MLIC Collector with the static and dynamic video streams. 
+        Initialize the MLICollector with the static and dynamic video streams. 
         '''
 
         return super().__init__(streams=[mlic_static, mlic_dynamic], logger=logger)

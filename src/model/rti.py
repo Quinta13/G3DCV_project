@@ -3,69 +3,99 @@ from typing import Tuple
 import cv2 as cv
 import numpy as np
 
-from src.model.interpolation import BasisInterpolationCollection as BICollection
+from src.model.interpolation import MLICPixelsBasisCollection
 from src.model.mlic import MultiLightImageCollection, DynamicCameraVideoStream
 from src.utils.typing import Size2D, Frame
 from src.utils.io_    import BaseLogger, SilentLogger
 
-class RTIObjectViewer:
+class RealTimeIllumination:
+    '''
+    Class to play a demo of real time illumination of an object using a Multi-Light Image Collection (MLIC) and a collection of basis images.
+    The basis collection is used to interpolate the object's reflectance under different lighting conditions and reconstruct the frame luminance (Y channel).
+    The Multi-Light Image Collection is used to add the UV channels to the frame, so that it can be displayed in color.
+    '''
 
     EXIT_KEY = 'q'
 
     def __init__(self, 
-        bi_collection : BICollection,
-        mlic          : MultiLightImageCollection,
-        frame_size    : int                 = 500, 
-        initial_coord : Tuple[float, float] = (0, 0),
-        logger        : BaseLogger          = SilentLogger()
+        bi_collection           : MLICPixelsBasisCollection,
+        mlic                    : MultiLightImageCollection,
+        frame_size              : int                 = 500, 
+        initial_light_direction : Tuple[float, float] = (0, 0),
+        logger                  : BaseLogger          = SilentLogger()
     ):
+        '''
+        Function to initialize the RealTimeIllumination object.
+
+        :param bi_collection: The collection of basis images used to interpolate the object's reflectance under different lighting conditions.
+        :param mlic: The Multi-Light Image Collection used to add the UV channels to the frame, so that it can be displayed in color.
+        :param frame_size: The size of the frame to display the object and the light direction arrow.
+        :param initial_light_direction: The initial light direction arrow coordinates.
+        :param logger: The logger object to log messages.
+        '''
         
+        # Check if the basis collection output shape match the MLIC size
         if bi_collection.out_shape != mlic.size:
             self._logger.handle_error(
                 msg=f'Invalid collection shape {bi_collection.out_shape} for MLIC of size {mlic.size}. ',
                 exception=ValueError
             )
 
-        self._bi_collection : BICollection        = bi_collection
-        self._mlic          : MultiLightImageCollection                = mlic
-        self._frame_size    : int                 = frame_size
-        self._coord         : Tuple[float, float] = initial_coord
-        self._draw_arrow    : bool                = True
-        self._logger        : BaseLogger          = logger
+        self._bi_collection   : MLICPixelsBasisCollection = bi_collection
+        self._mlic            : MultiLightImageCollection = mlic
+        self._frame_size      : int                       = frame_size
+        self._light_direction : Tuple[float, float]       = initial_light_direction
+        self._update      : bool                      = True
+        self._logger          : BaseLogger                = logger
 
-    def draw_arrow(self) -> Tuple[Frame, Frame]:
+    def get_frames(self) -> Tuple[Frame, Frame]:
+        '''
+        Uses the current light directions to draw the light direction arrow and reconstruct the object frame.
+        '''
 
-        cx, cy = self.coord
+        cx, cy = self.light_direction
+
+        # Draw the light direction arrow and the object frame
         light_direction_frame = DynamicCameraVideoStream.draw_line_direction(light_direction=(cx, cy), frame_side=self._frame_size)
-        object_frame_y = self._bi_collection.get_interpolation_frame(coord=self.coord)
+
+        # Reconstruct the object frame
+        object_frame_y = self._bi_collection.get_frame(coord=self.light_direction)
         object_frame = self._mlic.add_uv_channels(y_frame=object_frame_y)
 
         return light_direction_frame, object_frame
+    
+    # --- PROPERTIES ---
 
     @property
-    def coord(self) -> Tuple[float, float]: return self._coord
+    def light_direction(self) -> Tuple[float, float]: return self._light_direction
 
-    @coord.setter
-    def coord(self, value: Tuple[float, float]):
-        self._coord = value
-        self._draw_arrow = True
+    @light_direction.setter
+    def light_direction(self, value: Tuple[float, float]):
+        self._light_direction = value
+        self._update = True  # When a new light direction is set, activate the update flag
+
+    # --- STREAM METHODS ---
 
     def mouse_callback(self, event, x: float, y: float, flags, param) :
+        ''' Get the mouse position and update the light direction arrow. '''
 
         if event in [cv.EVENT_LBUTTONDOWN, cv.EVENT_MOUSEMOVE] and flags & cv.EVENT_FLAG_LBUTTON:
 
+            # Normalize the mouse coordinates in [-1, 1]
             half = self._frame_size // 2
             norm_x = (x - half) / half
             norm_y = (y - half) / half
 
+            # Normalize the vector in the unit circle
             distance = np.sqrt(norm_x**2 + norm_y**2)
             if distance > 1.0:
                 norm_x /= distance
                 norm_y /= distance
             
-            self.coord = (norm_x, -norm_y)
+            self.light_direction = (norm_x, -norm_y)  # NOTE: -y to invert the y-axis and match the image coordinates
 
     def play(self, window_size: Size2D = (500, 500)) -> None:
+        ''' Play the real time illumination demo. '''
 
         self._logger.info("Starting RTI object viewer...")
 
@@ -73,22 +103,20 @@ class RTIObjectViewer:
 
             cv.namedWindow('light_direction', cv.WINDOW_NORMAL); cv.resizeWindow('light_direction', *window_size)
             cv.namedWindow('rti_object',      cv.WINDOW_NORMAL); cv.resizeWindow('rti_object',      *window_size)
-
             cv.setMouseCallback('light_direction', self.mouse_callback)
 
             while True:
             
-                if self._draw_arrow:
-                    
-                    # Draw the frame with the updated arrow
-                    ld_frame, obj_frame = self.draw_arrow()
-                    self._draw_arrow = False
+                # Update frames is light direction has changed
+                if self._update:
+                    ld_frame, obj_frame = self.get_frames()
+                    self._update = False
 
-                # Show the frame
+                # Display the frames
                 cv.imshow('light_direction', cv.cvtColor(ld_frame,  cv.COLOR_RGB2BGR))
                 cv.imshow('rti_object',      cv.cvtColor(obj_frame, cv.COLOR_RGB2BGR))
 
-                # Check for the 'q' key to quit
+                # Check for the exit key
                 key = cv.waitKey(1)
                 if key == ord(self.EXIT_KEY):
                     break

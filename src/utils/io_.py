@@ -98,25 +98,28 @@ class PrintLogger(BaseLogger):
 class FileLogger(BaseLogger):
     ''' Logger that writes messages to a .log file. '''
 
-    def __init__(self, file: str, level=logging.INFO, overwrite: bool = True):
+    def __init__(self, file: str | None, level=logging.INFO, overwrite: bool = True):
         '''
         Initialize the logging by adding a file handler.
 
-        :param file:      The path to the log file.
-        :param level:     The logging level (default: INFO).
+        :param file: The path to the log file. 
+            If None the logger will not write to a file but still use loguru logger.
+        :param level: The logging level (default: INFO).
         :param overwrite: Whether to overwrite the log file if it exists (default: True).
         '''
 
         super().__init__(name='FileLogger')
 
-        # Check the file extension
-        InputSanitizationUtils.check_extension(path=file, ext='.log')
+        if file is not None:
+            # Check the file extension
+            InputSanitizationUtils.check_extension(path=file, ext='.log')
 
-        # Clear the log file by opening it in write mode
-        if overwrite and os.path.exists(file): os.remove(file)
+            # Clear the log file by opening it in write mode
+            if overwrite and os.path.exists(file): os.remove(file)
 
-        # Add the file handler
-        loguru_logger.add(file, level=level)
+            # Add the file handler
+            loguru_logger.add(file, level=level)
+        
         self._logger = loguru_logger
 
     def _info   (self, msg): self._logger.info   (msg)
