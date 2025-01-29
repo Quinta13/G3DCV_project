@@ -1,3 +1,10 @@
+'''
+This script synchronizes the static and dynamic videos from the experiment, ensuring that both have the same frame rate. 
+The synchronized videos are saved in the `sync` directory, with video extension specified in the parameter `SYNC_EXT`.
+
+Once synchronization is complete, the synchronized videos are played automatically.
+'''
+
 import os
 
 from src.model.preprocessing import VideoSync

@@ -1,10 +1,30 @@
+'''
+This script calibrates two cameras using a chessboard pattern captured in a video.
+
+The calibration process requires 
+    - A specified number of samples, which are extracted from the video at equidistant intervals (parameter `SAMPLES`).
+    - The chessboard size, which is the number of internal corners in the chessboard pattern (parameter `CHESSBOARD_SIZE`).
+
+The calibration results include:
+
+    1. The 3x3 intrinsic camera matrix.
+    2. The 5 distortion coefficients.
+    3. Additional information about the calibration process.
+
+The calibration data is saved in a .pkl file within the `calibration` directory.
+'''
+
 import os
 
 from src.model.preprocessing import ChessboardCameraCalibrator
 from src.utils.calibration import UndistortedVideoStream
 from src.utils.misc import Timer
 from src.utils.io_ import IOUtils, FileLogger
-from src.utils.settings import CALIBRATION_DIR, CALIBRATION_FILE, CALIBRATION_PATH, CAMERA_2, CAMERA_2_RAW_PATH, EXP_NAME, SAMPLES, CHESSBOARD_SIZE
+from src.utils.settings import (
+    CALIBRATION_DIR, CALIBRATION_FILE, CALIBRATION_PATH, 
+    CAMERA_2, CAMERA_2_RAW_PATH, EXP_NAME, 
+    SAMPLES, CHESSBOARD_SIZE
+)
 
 CAMERA_2_WINSIZE = (576, 324)
 

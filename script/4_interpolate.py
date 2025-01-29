@@ -1,3 +1,19 @@
+'''
+This script creates a collection of basis from the interpolation of every pixel from the Multi-Light Image Collection (MLIC).
+
+The process requires to specify:
+    - The name of the MLIC file, specified in the macro `MLIC_FILE`, to load in the `mlic` directory.
+    - The interpolation algorithm to use, specified in the macro `INTERPOLATION ALGO`,
+        which can be either Radial Basis Function (RBF) or Polynomial Texture Map (PTM).
+    - The size of the interpolated basis, specified in the macro `INTERPOLATION_SIZE`, which is the number of basis images to use in the interpolation.
+
+The basis follows the machine learning paradigm of train-test split. 
+The basis are fitted in the train set, and the test set is used to evaluate the interpolation error on unseen data.
+The split ration is specified in the macro `SPLIT_RATIO`.
+
+The interpolated basis are stored as a .pkl file in the `interpolation` directory. 
+'''
+
 import os
 
 from src.model.mlic import MultiLightImageCollection

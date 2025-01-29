@@ -1,3 +1,11 @@
+'''
+Class to play a demo of reflectance transformation imaging of an object using:
+    - The collection of basis, one per pixel to get object luminance (specified in the parameter `MLIC_FILE`).
+    - The uv-channels mean from the Multi-Light Image Collection (MLIC) to reconstruct the colored frame (specified in the parameter `BASIS_FILE`).
+
+The demo provides input from keyboard of the light direction and a real-time output of the object frame.
+'''
+
 from src.utils.settings import MLIC_FILE_PATH, BASIS_FILE_PATH
 from src.model.interpolation import MLICPixelsBasisCollection
 from src.model.mlic import MultiLightImageCollection
@@ -14,11 +22,7 @@ def main():
     bi_collection = MLICPixelsBasisCollection.from_pickle(path=BASIS_FILE_PATH, logger=logger)
     logger.info(f"{bi_collection}\n")
 
-    rti = InteractiveReflectanceTransformationImaging(
-        mlic          = mlic,
-        bi_collection = bi_collection,
-        logger=logger
-    )
+    rti = InteractiveReflectanceTransformationImaging(mlic=mlic, bi_collection=bi_collection, logger=logger)
 
     rti.play()
 

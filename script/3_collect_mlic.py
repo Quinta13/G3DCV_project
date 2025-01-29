@@ -1,6 +1,16 @@
-import os
+'''
+This script generates a Multi-Light Image Collection (MLIC) by detecting a marker in two synchronized video streams.
 
-from dotenv import load_dotenv
+- The static camera is used to warp the object frame into a square window.
+    The size of this window (in pixels) is controlled by the `MLIC_SIZE` parameter.
+
+- The dynamic camera is used to estimate the camera pose, which corresponds to the direction of the light source.
+    The method for estimating the camera pose ('geometric' or 'algebraic') is specified by the `LIGHT_POSITION_METHOD` parameter.
+
+Once the MLIC is created, it is saved as a .pkl file in the `mlic` directory.
+'''
+
+import os
 
 import numpy as np
 
@@ -10,7 +20,6 @@ from src.model.thresholding import AdaptiveThresholding, OtsuThresholding
 from src.utils.io_ import FileLogger, IOUtils, VideoFile
 from src.utils.calibration import CalibratedCamera
 from src.utils.settings import CALIBRATION_FILE, CAMERA_1_PATH, CAMERA_2_PATH, MLIC_DIR, MLIC_SIZE, LIGHT_POSITION_METHOD
-
 
 CALIBRATED_1  = CalibratedCamera.trivial_calibration(size=VideoFile(path=CAMERA_1_PATH).metadata.size)
 CALIBRATED_2  = CalibratedCamera.from_pickle(path=CALIBRATION_FILE)
@@ -25,7 +34,7 @@ DETECTOR = MarkerDetector(
     max_contour_area=float(np.prod(VideoFile(path=CAMERA_1_PATH).metadata.size) * 0.5) 
 )
 
-SKIP_FRAMES      = 10
+SKIP_FRAMES      = 1
 SHOW_HISTORY     = True
 CAMERA_1_WINSIZE = (360, 640)
 CAMERA_2_WINSIZE = (640, 360)
@@ -68,7 +77,7 @@ def main():
     )
     logger.info(f'Dynamic video stream: {mlic_dynamic}\n')
 
-    # Synchronize streams
+    # Collect MLIC
     mlic_collector = MultiLightImageCollector(mlic_static=mlic_static, mlic_dynamic=mlic_dynamic, logger=logger)
 	
     logger.info('STARTING MLIC COLLECTION.')
