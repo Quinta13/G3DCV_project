@@ -1,16 +1,22 @@
+'''
+This file contains the class to perform Reflectance Transformation Imaging (RTI) of an object using 
+fitted interpolation basis images and a Multi-Light Image Collection (MLIC).
+'''
+
 from typing import Tuple
 
 import cv2 as cv
 import numpy as np
 
+from src.model.model import LightDirection
 from src.model.interpolation import MLICPixelsBasisCollection
-from src.model.mlic import MultiLightImageCollection, DynamicCameraVideoStream
+from src.model.mlic import MultiLightImageCollection
 from src.utils.typing import Size2D, Frame
 from src.utils.io_    import BaseLogger, SilentLogger
 
-class RealTimeIllumination:
+class InteractiveReflectanceTransformationImaging:
     '''
-    Class to play a demo of real time illumination of an object using a Multi-Light Image Collection (MLIC) and a collection of basis images.
+    Class to play a demo of reflectance transformation imaging of an object using a Multi-Light Image Collection (MLIC) and a collection of basis images.
     The basis collection is used to interpolate the object's reflectance under different lighting conditions and reconstruct the frame luminance (Y channel).
     The Multi-Light Image Collection is used to add the UV channels to the frame, so that it can be displayed in color.
     '''
@@ -44,8 +50,8 @@ class RealTimeIllumination:
         self._bi_collection   : MLICPixelsBasisCollection = bi_collection
         self._mlic            : MultiLightImageCollection = mlic
         self._frame_size      : int                       = frame_size
-        self._light_direction : Tuple[float, float]       = initial_light_direction
-        self._update      : bool                      = True
+        self._light_direction : LightDirection            = LightDirection.from_tuple(initial_light_direction)
+        self._update          : bool                      = True
         self._logger          : BaseLogger                = logger
 
     def get_frames(self) -> Tuple[Frame, Frame]:
@@ -53,13 +59,11 @@ class RealTimeIllumination:
         Uses the current light directions to draw the light direction arrow and reconstruct the object frame.
         '''
 
-        cx, cy = self.light_direction
-
         # Draw the light direction arrow and the object frame
-        light_direction_frame = DynamicCameraVideoStream.draw_line_direction(light_direction=(cx, cy), frame_side=self._frame_size)
+        light_direction_frame = LightDirection.draw_line_direction(light_direction=self.light_direction, frame_side=self._frame_size)
 
         # Reconstruct the object frame
-        object_frame_y = self._bi_collection.get_frame(coord=self.light_direction)
+        object_frame_y = self._bi_collection.get_frame(light_direction=self.light_direction)
         object_frame = self._mlic.add_uv_channels(y_frame=object_frame_y)
 
         return light_direction_frame, object_frame
@@ -67,12 +71,12 @@ class RealTimeIllumination:
     # --- PROPERTIES ---
 
     @property
-    def light_direction(self) -> Tuple[float, float]: return self._light_direction
+    def light_direction(self) -> LightDirection: return self._light_direction
 
     @light_direction.setter
     def light_direction(self, value: Tuple[float, float]):
-        self._light_direction = value
-        self._update = True  # When a new light direction is set, activate the update flag
+        self._light_direction = LightDirection(*value)
+        self._update = True  # When a new light direction is set, set the update flag on
 
     # --- STREAM METHODS ---
 

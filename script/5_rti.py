@@ -1,7 +1,7 @@
 from src.utils.settings import MLIC_FILE_PATH, BASIS_FILE_PATH
 from src.model.interpolation import MLICPixelsBasisCollection
 from src.model.mlic import MultiLightImageCollection
-from src.model.rti import RealTimeIllumination
+from src.model.rti import InteractiveReflectanceTransformationImaging
 from src.utils.io_ import FileLogger
 
 def main():
@@ -14,7 +14,7 @@ def main():
     bi_collection = MLICPixelsBasisCollection.from_pickle(path=BASIS_FILE_PATH, logger=logger)
     logger.info(f"{bi_collection}\n")
 
-    rti = RealTimeIllumination(
+    rti = InteractiveReflectanceTransformationImaging(
         mlic          = mlic,
         bi_collection = bi_collection,
         logger=logger

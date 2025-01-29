@@ -12,7 +12,7 @@ _T = TypeVar('_T')
 _D = TypeVar('_D')
 
 def default(var : _T | None, val : _D) -> _T | _D: return val if var is None else var
-
+''' Get the default value if the variable is None. '''
 
 # ____________________________________ ALIASES ____________________________________
 
@@ -39,18 +39,12 @@ Optionally, it can represent an RGBA color as a tuple of four integers, where th
 
 Frame = cv2.typing.MatLike
 '''
-Represents a frame as a 2D matrix or a 3D tensor of pixels.
+Represents a frame as a 2D matrix (grayscale) or a 3D tensor (color image) of pixels.
 '''
 
 Views = Dict[str, Frame]
 '''
 Represents different frame views of a video stream, indexed by string keys.
-'''
-
-LightDirection = Tuple[float, float]
-'''
-Represents the light source direction as a tuple of two floats (u, v).
-The condition u^2 + v^2 <= 1 must hold.
 '''
 
 CameraPoseMethod = Literal['algebraic', 'geometric']
@@ -63,7 +57,7 @@ Specifies the method used to estimate the camera pose. The options are:
 MarkerSquareMethod = Literal['border', 'descendants', 'scaled']
 '''
 Specifies the method for computing the black-to-white transition in marker squares (outer black and inner white squares). The options are:
-    - 'border': Uses a mask containing only the contour pixels of each square.
-    - 'descendants': Subtracts the descendant contours from the square contour mask, based on the hierarchy of closed contour extraction.
-    - 'scaled': Creates an artificial child contour by scaling down the square contour and subtracting it from the original square contour mask.
+    - 'border'     : Uses a mask containing only the contour pixels of each square.
+    - 'descendants': Subtracts the descendant contours from the filled square contour mask, based on the hierarchy of closed contour extraction.
+    - 'scaled'     : Creates an artificial child contour by scaling down the square contour and subtracting it from the original square contour mask.
 '''

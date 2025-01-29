@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict
 import cv2 as cv
 
-from src.utils.calibration import CalibratedVideoStream, CalibratedCamera
+from src.utils.calibration import UndistortedVideoStream, CalibratedCamera
 from src.utils.io_ import SilentLogger, BaseLogger
 from src.utils.typing import Frame, Views, Size2D
 
@@ -194,7 +194,7 @@ class AdaptiveThresholding(Thresholding):
 
         return views | {'binary': frame_b}
 
-class ThresholdedVideoStream(CalibratedVideoStream):
+class ThresholdedVideoStream(UndistortedVideoStream):
     ''' Video stream with a thresholding method applied to the frames. '''
 
     def __init__(

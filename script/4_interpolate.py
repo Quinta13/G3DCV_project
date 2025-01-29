@@ -4,6 +4,7 @@ from src.model.mlic import MultiLightImageCollection
 from src.model.interpolation import MLICRadialBasisInterpolator, MLICBasisCollectionInterpolator, RTIPolynomialTextureMapInterpolator
 from src.utils.io_ import IOUtils, FileLogger
 from src.utils.settings import EXP_NAME, INTERPOLATION_DIR, MLIC_FILE_PATH, SPLIT_RATIO, INTERPOLATION_ALGO, INTERPOLATION_SIZE
+from src.utils.misc import Timer
 
 PROGRESS = 5000
 
@@ -46,14 +47,16 @@ if __name__ == "__main__":
     # Computing collection of interpolation for every pixel
     logger.info('COMPUTING COLLECTION OF INTERPOLATION FOR EVERY PIXEL') 
     bi_collection = mlic_bi.get_interpolation_collection(progress=PROGRESS)
-    logger.info(msg=f'\n{bi_collection}\n')
 
     # Compute test and train error
     logger.info('COMPUTING TEST AND TRAIN ERROR')
+    
+    timer=Timer()
     train_error = bi_collection.mse_error(mlic=mlic_train)
     test_error  = bi_collection.mse_error(mlic=mlic_test)
     logger.info(msg=f'> Train error: {train_error}')
-    logger.info(msg=f'> Test error:  {test_error}\n')
+    logger.info(msg=f'> Test error:  {test_error}')
+    logger.info(msg=f'Completed in time: {timer}\n')
 
     # Saving results
     logger.info(msg='SAVING MLIC INTERPOLATION')

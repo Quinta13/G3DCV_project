@@ -27,9 +27,10 @@ import cv2 as cv
 import numpy as np
 from numpy.typing import NDArray
 
+from src.model.model import LightDirection
 from src.model.thresholding import Thresholding
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
-from src.utils.typing import LightDirection, Frame, Size2D, Views, Pixel, RGBColor, CameraPoseMethod
+from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor, CameraPoseMethod
 from src.utils.stream import Stream, SynchronizedVideoStream
 from src.utils.calibration import CalibratedCamera
 from src.utils.io_ import (
@@ -104,6 +105,32 @@ class MultiLightImageCollection:
         self._light_directions : NDArray                 = light_directions
         self._uv_means         : Tuple[NDArray, NDArray] = uv_means
     
+    # --- MAGIC METHODS ---
+
+    def __str__(self)  -> str: return f"{self.__class__.__name__}[shape: {'x'.join([str(s) for s in self._size])}; items: {self._n_frames}]"
+    def __repr__(self) -> str: return str(self)
+    def __len__(self)  -> int: return self._n_frames
+
+    def __iter__(self) -> Iterator[Tuple[Frame, LightDirection]]:
+        ''' Iterate on the couple of (object frame, light direction) for each frame. '''
+
+        for obj_frame, light_dir in zip(self._obj_frames, self._light_directions):
+            yield obj_frame, LightDirection.from_tuple(light_dir)
+
+    def __getitem__(self, index: int) -> Tuple[Frame, LightDirection]: return self._obj_frames[index], LightDirection.from_tuple(self._light_directions[index])
+    ''' Return the object frame and light direction at the specified index. '''
+
+    # --- PROPERTIES ---
+
+    @property
+    def obj_frames(self) -> NDArray: return self._obj_frames
+
+    @property
+    def light_directions(self) -> NDArray: return self._light_directions
+
+    @property
+    def size(self) -> Size2D: return self._size
+
     # --- PICKLE METHODS ---
     
     @classmethod
@@ -123,39 +150,15 @@ class MultiLightImageCollection:
         path   : str,
         logger : BaseLogger = SilentLogger()
     ) -> None:
-        ''' Save the camera calibration to a pickle file. '''
+        ''' Save the MLIC to a pickle file. '''
 
         ISUtils.check_output(path=PathUtils.get_folder_path(path=path), logger=logger)
 
-        logger.info(msg=f"Saving MLIC to {path} ...")
+        logger.info(msg=f"Saving Multi-Light Image Collection to {path} ...")
 
         timer = Timer()
         with open(path, 'wb') as f: pickle.dump(self, f)
         logger.info(msg=f"Completed in {timer}. ")
-
-    
-    # --- MAGIC METHODS ---
-
-    def __str__(self)  -> str: return f"{self.__class__.__name__}[shape: {'x'.join([str(s) for s in self._size])}; items: {self._n_frames}]"
-    def __repr__(self) -> str: return str(self)
-    def __len__(self)  -> int: return self._n_frames
-
-    def __iter__(self) -> Iterator[Tuple[Frame, LightDirection]]: return iter(zip(self._obj_frames, self._light_directions))
-    ''' Iterate on the couple of (object frame, light direction) for each frame. '''
-
-    def __getitem__(self, index: int) -> Tuple[Frame, LightDirection]: return self._obj_frames[index], self._light_directions[index]
-    ''' Return the object frame and light direction at the specified index. '''
-
-    # --- PROPERTIES ---
-
-    @property
-    def obj_frames(self) -> NDArray: return self._obj_frames
-
-    @property
-    def light_directions(self) -> NDArray: return self._light_directions
-
-    @property
-    def size(self) -> Size2D: return self._size
 
     # --- UTILITY METHODS ---
 
@@ -219,8 +222,8 @@ class MultiLightImageCollection:
 
         return {
             'object_frame'         : self.add_uv_channels(y_frame=obj_frame),
-            'light_direction'      : DynamicCameraVideoStream.draw_line_direction        (light_direction=light_source),
-            'light_direction_hist' : DynamicCameraVideoStream.draw_line_direction_history(points=self._light_directions[:index+1])
+            'light_direction'      : LightDirection.draw_line_direction        (light_direction=light_source),
+            'light_direction_hist' : LightDirection.draw_line_direction_history(light_directions=self._light_directions[:index+1])
         }
 
     def to_stream(self, name: str = 'mlic', logger: BaseLogger = SilentLogger()) -> MultiLightImageCollectionStream: 
@@ -318,7 +321,7 @@ class MultiLightImageCollectionAccumulator:
 
         # Convert the accumulated object frames and light directions to numpy arrays
         # The frames are converted to YUV format
-        light_directions : NDArray = np.array(self._light_directions)
+        light_directions : NDArray = np.array([list(ld) for ld in self._light_directions])
         obj_frames_yuv   : NDArray = np.array([cv.cvtColor(obj_frame, cv.COLOR_RGB2YUV) for obj_frame in self._object_frames])
 
         # Extract the Y channel for the MLIC
@@ -484,11 +487,11 @@ class DynamicCameraVideoStream(MarkerDetectionVideoStream):
         self._light_directions.append(light_direction)
 
         # Draw light direction and history (if flag is set)
-        direction_frame = self.draw_line_direction(light_direction=light_direction)
+        direction_frame = LightDirection.draw_line_direction(light_direction=light_direction)
         views_out = super_views | {'light_direction': direction_frame}
 
         if self._plot_history:
-            direction_hist_frame = self.draw_line_direction_history(points=np.array(self._light_directions))
+            direction_hist_frame = LightDirection.draw_line_direction_history(light_directions=np.array([list(ld) for ld in self._light_directions]))
             views_out |= {'light_direction_hist': direction_hist_frame}
         
         return views_out
@@ -504,92 +507,6 @@ class DynamicCameraVideoStream(MarkerDetectionVideoStream):
             ( {'light_direction'     : np.zeros_like(frame)} if 'light_direction'      not in super_views else super_views) |\
             (({'light_direction_hist': np.zeros_like(frame)} if 'light_direction_hist' not in super_views else super_views) if self._plot_history else {})
 
-    # --- DRAW LIGHT DIRECTION ---
-
-    @staticmethod
-    def draw_line_direction(light_direction: LightDirection, frame_side: int = 500) -> Frame:
-        ''' Draw the light direction as an arrow inside the unit circle. '''
-
-        x, y = light_direction
-
-        # Ensure x, y are within [-1, 1]
-        if not (-1 <= x <= 1 and -1 <= y <= 1):
-            raise ValueError("x and y must be in the range [-1, 1]")
-        
-        # Create a black background
-        image: NDArray = np.zeros((frame_side, frame_side, 3), dtype=np.uint8)
-
-        # Define the circle center and radius
-        center = (frame_side // 2, frame_side // 2)
-        radius = frame_side // 2  # Circle radius is half of the image size
-
-        # Draw the white circle
-        cv.circle(image, center, radius, (255, 255, 255), thickness=4)
-
-        # Compute the arrow endpoint in pixel coordinates
-        arrow_x = int(center[0] + x * radius)  # Scale x to the radius
-        arrow_y = int(center[1] - y * radius)  # Scale y to the radius (inverted y-axis)
-
-        # Draw the red arrow
-        cv.arrowedLine(image, center, (arrow_x, arrow_y), (255, 0, 0), thickness=4, tipLength=0.05)
-
-        # Add the light direction as text in the bottom-right corner, with x and y on separate lines
-        text_x         = f"x: {x:+.2f}"
-        text_y         = f"y: {y:+.2f}"
-        font_scale     = 0.6
-        font_thickness = 2
-        padding        = 10
-        line_spacing   = 5
-
-        # Calculate text size to align properly
-        text_x_size, _ = cv.getTextSize(text_x, cv.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-        text_y_size, _ = cv.getTextSize(text_y, cv.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-
-        # Define positions for x and y lines
-        text_x_pos = (frame_side - text_x_size[0] - padding, frame_side - text_y_size[1] - padding - line_spacing)
-        text_y_pos = (frame_side - text_y_size[0] - padding, frame_side - padding)
-
-        for text, text_pos in zip([text_x, text_y], [text_x_pos, text_y_pos]):
-            cv.putText(image, text, text_pos, cv.FONT_HERSHEY_SIMPLEX, font_scale, (255, 0, 0), font_thickness)
-
-        return image
-    
-    @staticmethod
-    def draw_line_direction_history(
-        points    : NDArray,
-        img_side  : int      = 500,
-        col_start : RGBColor = (255, 255, 255),
-        col_end   : RGBColor = (  0,   0, 255)
-    ) -> Frame:
-        ''' Draw the history of light directions as points with a color gradient. '''
-        
-        # Blank image
-        img = np.zeros((img_side, img_side, 3), dtype=np.uint8)
-        n_points = points.shape[0]
-        
-        # Compute center and radius
-        center = (img_side // 2, img_side // 2)
-        radius = img_side // 2
-        
-        # Draw the white circle
-        cv.circle(img, center, radius, (255, 255, 255), thickness=4)
-
-        # Normalize the points from [-1, 1] to pixel coordinates
-        normalized_points = np.empty_like(points, dtype=int)
-        normalized_points[:, 0] = (center[0] + points[:, 0] * radius).astype(int)  # Scale x
-        normalized_points[:, 1] = (center[1] - points[:, 1] * radius).astype(int)  # Scale y
-
-        # Plot point with color gradient
-        for j, (x, y) in enumerate(normalized_points.astype(int)):
-            
-            # Compute the color based on the gradient
-            color = tuple(
-                int(col_start[i] + (j/n_points) * (col_end[i] - col_start[i]))
-                for i in range(3)
-            )
-            cv.circle(img, (x, y), radius=3, color=color, thickness=-1)
-
-        return img
 
 class MultiLightImageCollector(SynchronizedVideoStream):
     ''' 
@@ -697,7 +614,6 @@ class MultiLightImageCollector(SynchronizedVideoStream):
         timer.reset()
         mlic = self._accumulator.to_mlic()
         self._logger.info(f'Completed in {timer}. ')
-        self._logger.info(f'Multi-Light Image Collection: {mlic}')
-        self._logger.info('')
+        self._logger.info(f'Multi-Light Image Collection: {mlic}\n')
 
         return mlic

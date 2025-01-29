@@ -3,8 +3,8 @@ This module contains classes to interpolate a basis from a set of coordinates an
 It provides two main classes:
 - The Basis class to represent and manipulate a basis tensor, representing a precomputed discretized function;
 - The Interpolators classes to interpolate a basis from a set of coordinates and values. Two interpolators are implemented:
-	- The Radial Basis Interpolator;
-	- The Polynomial Texture Map Interpolator.
+	1. The Radial Basis Interpolator;
+	2. The Polynomial Texture Map Interpolator.
 '''
 
 import itertools
@@ -20,6 +20,7 @@ from matplotlib.axes import Axes
 from numpy.typing import NDArray
 from scipy.interpolate import Rbf
 
+from src.model.model import LightDirection
 from src.utils.typing import Shape, Frame, Pixel
 from src.model.mlic import MultiLightImageCollection
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer
@@ -104,7 +105,7 @@ class Basis:
 	'''
 	NOTE:   The mapping and discretization methods from coordinate system to basis indexes 
 			are static to allow the user to use them without instantiating the class.
-		    The class implements corresponding methods as STUB using proper class attributes.
+			The class implements corresponding methods as STUB using proper class attributes.
 	'''
 
 	@staticmethod
@@ -207,8 +208,8 @@ class Basis:
 		dim_x, dim_y = self.shape
 
 		# Set the axis limits and ticks
-		ax.set_xlim(0, dim_x-1); ax.set_xticks(np.linspace(0, dim_x-1, TICK_STEP)); ax.set_xticklabels(np.linspace(min_x, max_x, TICK_STEP))
-		ax.set_ylim(0, dim_y-1); ax.set_yticks(np.linspace(0, dim_y-1, TICK_STEP)); ax.set_yticklabels(np.linspace(min_y, max_y, TICK_STEP))
+		ax.set_xlim(dim_x-1, 0); ax.set_xticks(np.linspace(0, dim_x-1, TICK_STEP)); ax.set_xticklabels(-np.linspace(min_x, max_x, TICK_STEP))
+		ax.set_ylim(dim_y-1, 0); ax.set_yticks(np.linspace(0, dim_y-1, TICK_STEP)); ax.set_yticklabels(-np.linspace(min_y, max_y, TICK_STEP))
 
 		# Set the colorbar limits
 		if min_max_colorbar: vmin, vmax = self.values_range
@@ -220,15 +221,18 @@ class Basis:
 			values, coords = points
 
 			# Move the coordinates to the pixel space
-			coords_ = np.array([self._map_coordinate(c) for c in coords])
+			coords_ = np.array([self._map_coordinate((u, v)) for (v, u) in coords])
 
 			if not min_max_colorbar:
 				vmin = min(vmin, values.min())
 				vmax = max(vmax, values.max())
-			
+
+			# Invert axis to match matplotlib coordinates
+
+			# Swap the points to match matplotlib coordinates			
 			ax.scatter(
-				*coords_.T,           # Coordinates for scatter points
-				c=values,             # Values for coloring
+				coords_[:, 0], coords_[:, 1],
+				c=values,       # Values for coloring
 				cmap='viridis',       # Use the same colormap
 				edgecolor='k',        # Optional: edge for better visibility
 				s=25,                 # Size of scatter points
@@ -238,11 +242,11 @@ class Basis:
 		
 		# Plot the basis as an image
 		img = ax.imshow(
-			self.basis, 
+			self.basis.T,
 			cmap='viridis', 
 			vmin=vmin, 
 			vmax=vmax,
-			aspect='auto'  # Allow the image to stretch to fill the axis
+			aspect='auto',  # Allow the image to stretch to fill the axis
 		)
 
 		ax.figure.colorbar(img, ax=ax, label='Pixel Luminance')  # type: ignore - figure has attribute colorbar
@@ -300,7 +304,7 @@ class BasisCollection:
 		
 		return Basis.discretize_coordinate(coord=coord, min_max_coords=self._coords_range, shape=self.basis_shape)
 
-	def get_vector(self, coord: Tuple[float, float]) -> NDArray:
+	def get_vector(self, coord: Tuple[float, ...]) -> NDArray:
 		''' Given a coordinate, stack in a vector all the basis values at that coordinate. '''
 		
 		idx = self.discretize_coordinate(coord=coord)
@@ -370,8 +374,8 @@ class MLICPixelsBasisCollection(BasisCollection):
 
 	def __str__(self) -> str:
 		
-		w, h = self._out_shape
 		super_str = super().__str__()[:-1]
+		w, h = self._out_shape
 
 		return f'{super_str}; out shape: {w}x{h}]'\
 		
@@ -386,12 +390,13 @@ class MLICPixelsBasisCollection(BasisCollection):
 	def from_pickle(cls, path: str, logger: BaseLogger = SilentLogger()) -> 'MLICPixelsBasisCollection':
 		return cast('MLICPixelsBasisCollection', super().from_pickle(path=path, logger=logger))
 
-	def get_frame(self, coord: Tuple[float, float]) -> Frame:
-		''' Reconstruct the frame by reshaping the basis vector at the given coordinate. '''
+	def get_frame(self, light_direction: LightDirection) -> Frame:
+		''' Reconstruct the frame by reshaping the basis vector for a given light direction. '''
 
-		vector = super().get_vector(coord=coord)
+		vector = super().get_vector(coord=tuple(light_direction))
+		frame  = vector.reshape(self.out_shape)
 
-		return vector.reshape(self.out_shape)
+		return frame
 	
 	def mse_error(self, mlic: MultiLightImageCollection) -> float:
 		''' Compute the MSE error between the basis collection and a ground truth MLIC object. '''
@@ -402,12 +407,12 @@ class MLICPixelsBasisCollection(BasisCollection):
 		for true_frame, light_direction in mlic:
 			
 			# Get the predicted frame
-			predicted_frame = self.get_vector(coord=light_direction)
+			predicted_frame = self.get_frame(light_direction=light_direction)
 
 			# Compute the per pixel-squared error
 			frame_pixel_distance = (predicted_frame - true_frame)**2
 
-			# Append the mean pixel error
+			# Append the frame mean pixel error
 			errors.append(frame_pixel_distance.mean())
 
 		# Compute the mean squared error across objects
@@ -492,7 +497,7 @@ class BasisInterpolator(ABC):
 	It must return a function mapping the interpolation grid to the interpolated basis.
 	'''
 
-	def interpolate(self, values: NDArray) -> Basis:
+	def __call__(self, values: NDArray) -> Basis:
 		'''
 		Return the interpolated basis given the values associated to the coordinates.
 		It uses the interpolation function fitted on the values to interpolate the basis.
@@ -576,11 +581,11 @@ class RTIPolynomialTextureMapInterpolator(MLICBasisInterpolator):
 			''' Compute the PTM interpolation given light direction and coefficients. '''
 
 			return (
-				coefficients[0] +
-				coefficients[1] * u +
-				coefficients[2] * v +
-				coefficients[3] * u**2 +
-				coefficients[4] * v**2 +
+				coefficients[0] * 1     +
+				coefficients[1] * u     +
+				coefficients[2] * v     +
+				coefficients[3] * u**2  +
+				coefficients[4] * v**2  +
 				coefficients[5] * u * v
 			)
         
@@ -633,7 +638,7 @@ class MLICBasisCollectionInterpolator:
 	def get_pixel_interpolation(self, pixel: Pixel) -> Basis:
 		''' Get the interpolated basis for a specific pixel. '''
 
-		return self._rti_interpolator.interpolate(values=self._mlic.get_pixel_values(pixel=pixel))
+		return self._rti_interpolator(values=self._mlic.get_pixel_values(pixel=pixel))
 	
 	def get_interpolation_collection(self, progress: int | None = None) -> MLICPixelsBasisCollection:
 		'''
@@ -642,23 +647,30 @@ class MLICBasisCollectionInterpolator:
 		'''
 
 		rows, cols = self._mlic.size
+		
 		tot = rows * cols
+		self._logger.info(msg=f'Starting interpolation for all pixels ({tot}). ')
 
 		interpolated_basis = []
-
-		self._logger.info(msg=f'Starting interpolation for all pixels ({tot}). ')
 
 		timer = Timer()
 
 		for i, (px, py) in enumerate(itertools.product(range(rows), range(cols))):
 
+			# Log progress
 			if progress and i % progress == 0:
 				self._logger.info(msg=f' > Interpolating pixel {i} of {tot} ({i/tot:.2%}) - Elapsed time: {timer}. ')
 			
+			# Interpolate the pixel basis
 			bi = self.get_pixel_interpolation(pixel=(px, py))
-
 			interpolated_basis.append(bi)
 		
-		self._logger.info(msg=f'Interpolation completed in {timer}. ')
+		self._logger.info(msg=f'Interpolation completed in {timer}. \n')
 
-		return MLICPixelsBasisCollection(basis_collection=interpolated_basis, out_shape=self._mlic.size)
+		self._logger.info("Creating basis collection ...")
+		timer.reset()
+		mlic_basis_collection = MLICPixelsBasisCollection(basis_collection=interpolated_basis, out_shape=self._mlic.size)
+		self._logger.info(msg=f"Completed in {timer}. ")
+		self._logger.info(msg=f'{mlic_basis_collection}. \n')
+
+		return mlic_basis_collection

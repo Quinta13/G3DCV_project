@@ -1,7 +1,7 @@
 import os
 
 from src.model.preprocessing import ChessboardCameraCalibrator
-from src.utils.calibration import CalibratedVideoStream
+from src.utils.calibration import UndistortedVideoStream
 from src.utils.misc import Timer
 from src.utils.io_ import IOUtils, FileLogger
 from src.utils.settings import CALIBRATION_DIR, CALIBRATION_FILE, CALIBRATION_PATH, CAMERA_2, CAMERA_2_RAW_PATH, EXP_NAME, SAMPLES, CHESSBOARD_SIZE
@@ -44,8 +44,8 @@ def main():
     # Playing Distorted VS Undistorted video
     logger.info(msg='PLAYING DISTORTED VS UNDISTORTED VIDEO')
     timer.reset()
-    undistorted_video = CalibratedVideoStream(path=CAMERA_2_RAW_PATH, calibration=camera_calibration, logger=logger)
+    undistorted_video = UndistortedVideoStream(path=CAMERA_2_RAW_PATH, calibration=camera_calibration, logger=logger)
     undistorted_video.play(window_size=CAMERA_2_WINSIZE)
     logger.info(msg=f'Video played in {timer}. \n')
 
-def __main__(): main()
+if __name__ == '__main__': main()

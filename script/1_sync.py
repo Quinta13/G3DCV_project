@@ -1,6 +1,5 @@
 import os
 
-
 from src.model.preprocessing import VideoSync
 from src.utils.settings import (
     EXP_NAME, SYNC_DIR,

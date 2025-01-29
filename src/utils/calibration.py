@@ -181,7 +181,7 @@ class CalibratedCamera:
         with open(path, 'wb') as f: pickle.dump(self, f)
 
 
-class CalibratedVideoStream(VideoStream):
+class UndistortedVideoStream(VideoStream):
     '''
     Video stream using camera calibration distortion parameters to undistort the frames.
     '''

@@ -25,9 +25,8 @@ DETECTOR = MarkerDetector(
     max_contour_area=float(np.prod(VideoFile(path=CAMERA_1_PATH).metadata.size) * 0.5) 
 )
 
-SKIP_FRAMES      = 1
-PLOT_HISTORY     = False
-SCALE            = 0.5
+SKIP_FRAMES      = 10
+SHOW_HISTORY     = True
 CAMERA_1_WINSIZE = (360, 640)
 CAMERA_2_WINSIZE = (640, 360)
 SQUARE_WINSIZE   = (256, 256)
@@ -65,7 +64,7 @@ def main():
         marker_detector=DETECTOR, 
         method=LIGHT_POSITION_METHOD,
         logger=logger,
-		plot_history=PLOT_HISTORY
+		plot_history=SHOW_HISTORY
     )
     logger.info(f'Dynamic video stream: {mlic_dynamic}\n')
 
