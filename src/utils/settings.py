@@ -7,7 +7,7 @@ import os
 from typing import Tuple
 from dotenv import load_dotenv
 
-from src.utils.typing import CameraPoseMethod
+from src.model.typing import CameraPoseMethod
 
 load_dotenv(r'.env', override=True)
 

@@ -19,7 +19,7 @@ from src.utils.io_ import (
     InputSanitizationUtils as ISUtils, PathUtils
 )
 from src.utils.stream import VideoStream
-from src.utils.typing import Views, Frame, Size2D, default
+from src.model.typing import Views, Frame, Size2D, default
 
 @dataclass
 class CalibratedCamera:
@@ -179,7 +179,6 @@ class CalibratedCamera:
         logger.info(msg=f"Saving camera calibration to {path}")
 
         with open(path, 'wb') as f: pickle.dump(self, f)
-
 
 class UndistortedVideoStream(VideoStream):
     '''

@@ -11,7 +11,7 @@ from IPython.display import display
 from numpy.typing import NDArray
 import cv2 as cv
 
-from src.utils.typing import RGBColor
+from src.model.typing import RGBColor
 
 # _______________________________ TIME _______________________________
 class Timer:
@@ -56,7 +56,7 @@ def generate_palette(n: int, palette_type: str = "hsv") -> List[RGBColor]:
         f"Available options are: {', '.join(plt.colormaps()[:10])} ... "
     )
 
-# ------------------------------ NOTEBOOKS ------------------------------
+# _______________________________ NOTEBOOKS _______________________________
 
 def launch_widget(widgets_: List[widgets.Widget], update_fn: Callable):
     ''' Launch a widget with the specified widgets and update function. '''

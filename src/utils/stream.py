@@ -7,13 +7,13 @@ from typing import Any, Dict, Iterator, List, Tuple
 import cv2 as cv
 import numpy as np
 
-from src.utils.typing import Frame, Size2D, Views
+from src.model.typing import Frame, Size2D, Views
 from src.utils.io_ import (
     SilentLogger, BaseLogger,
     PathUtils, InputSanitizationUtils as ISUtils,
     VideoFile
 )
-from src.utils.typing import default
+from src.model.typing import default
 
 class Stream(ABC):
     '''

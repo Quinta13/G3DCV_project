@@ -1,5 +1,5 @@
 '''
-This file contains auxiliary classes used in the project.
+This file contains auxiliary geometric classes used in the project.
     - Geometric primitives such as points ad a sorted set of vertices, used to handle marker corners.
 	- Contours, used to represent detected contours in the frame.
 	- LightDirection, used to represent the light source direction.
@@ -14,7 +14,7 @@ import cv2 as cv
 import numpy as np
 from numpy.typing import NDArray
 
-from src.utils.typing import Frame, RGBColor, default
+from src.model.typing import Frame, RGBColor, default
 
 
 # __________________________________ GEOMETRIC PRIMITIVES __________________________________ #
@@ -132,8 +132,8 @@ class SortedVertices:
 		'''
 
 		# NOTE: We decide to keep points as NDArray and not as Sequence[Point2D]
-		#	   because we mainly leverage on numpy functions to sort and manipulate the vertices.
-		#	   We only convert the vertices to Point2D to output them.
+		#	    because we mainly leverage on numpy functions to sort and manipulate the vertices.
+		#	    We only convert the vertices to Point2D to output them.
 
 		# Check points are 2D
 		self._len, dim = vertices.shape
@@ -228,9 +228,13 @@ class LightDirection:
 	u: float
 	v: float
 
+	# --- MAGIC METHODS ---
+
 	def __str__ (self) -> str: return f'{self.__class__.__name__}({self.u:.2f}, {self.v:.2f})'
 	def __repr__(self) -> str: return str(self)
 	def __iter__(self) -> Iterator[float]: return iter([self.u, self.v])
+
+	# --- CONSTRUCTORS ---
 
 	@classmethod
 	def from_tuple(cls, uv: Tuple[float, float]) -> LightDirection:
@@ -437,7 +441,7 @@ class Contour:
 	def perimeter(self) -> float: return cv.arcLength(self.contour, closed=True)
 
 	@property
-	def center_point(self) -> Point2D: return Point2D.from_tuple(np.mean(self.contour, axis=0, dtype=np.int32)[0])
+	def centroid(self) -> Point2D: return Point2D.from_tuple(np.mean(self.contour, axis=0, dtype=np.int32)[0])
 
 	# --- CONTOUR SHAPE ---
 

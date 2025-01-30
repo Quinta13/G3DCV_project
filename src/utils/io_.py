@@ -20,7 +20,7 @@ from numpy.typing import NDArray
 from scipy.io.wavfile import read as wav_read
 
 from src.utils.misc import Timer
-from src.utils.typing import Size2D
+from src.model.typing import Size2D
 
 
 # _______________________________ LOGGER _______________________________

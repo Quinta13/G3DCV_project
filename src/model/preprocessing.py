@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from numpy.typing import NDArray
 from scipy.signal import correlate
 
-from src.utils.typing import Size2D
+from src.model.typing import Size2D
 from src.utils.calibration import CalibratedCamera
 from src.utils.stream import VideoStream
 from src.utils.io_ import (

@@ -1,5 +1,5 @@
 '''
-This script calibrates two cameras using a chessboard pattern captured in a video.
+This script calibrates a camera using a chessboard pattern captured in a video.
 
 The calibration process requires 
     - A specified number of samples, which are extracted from the video at equidistant intervals (parameter `SAMPLES`).

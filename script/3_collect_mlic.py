@@ -1,11 +1,11 @@
 '''
 This script generates a Multi-Light Image Collection (MLIC) by detecting a marker in two synchronized video streams.
 
-- The static camera is used to warp the object frame into a square window.
-    The size of this window (in pixels) is controlled by the `MLIC_SIZE` parameter.
+    - The static camera is used to warp the object frame into a square window.
+        The size of this window (in pixels) is controlled by the `MLIC_SIZE` parameter.
 
-- The dynamic camera is used to estimate the camera pose, which corresponds to the direction of the light source.
-    The method for estimating the camera pose ('geometric' or 'algebraic') is specified by the `LIGHT_POSITION_METHOD` parameter.
+    - The dynamic camera is used to estimate the camera pose, which corresponds to the direction of the light source.
+        The method for estimating the camera pose ('geometric' or 'algebraic') is specified by the `LIGHT_POSITION_METHOD` parameter.
 
 Once the MLIC is created, it is saved as a .pkl file in the `mlic` directory.
 '''

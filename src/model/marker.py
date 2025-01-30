@@ -17,11 +17,11 @@ import numpy as np
 import cv2 as cv
 from numpy.typing import NDArray
 
-from src.model.model import Contour, Contours, LightDirection, Point2D, Points2D, SortedVertices
+from src.model.geom import Contour, Contours, LightDirection, Point2D, Points2D, SortedVertices
 from src.utils.misc   import generate_palette
 from src.utils.io_ import BaseLogger, SilentLogger
 from src.utils.calibration import CalibratedCamera
-from src.utils.typing import Frame, RGBColor, Views, Size2D, CameraPoseMethod, MarkerSquareMethod
+from src.model.typing import Frame, RGBColor, Views, Size2D, CameraPoseMethod, MarkerSquareMethod
 from src.model.thresholding import ThresholdedVideoStream, Thresholding
 
 # __________________________________ MARKER __________________________________
@@ -60,7 +60,7 @@ class Marker:
 		if not anchor_contour.is_circle(): raise ValueError(f'Invalid circle contour for the marker. ') 
 
 		c0, c1, c2, c3 = [marker_vertices[i] for i in range(4)]  # Corners in clockwise order
-		point = anchor_contour.center_point					  # Anchor point is the mean point of the circle contour
+		point = anchor_contour.centroid					  # Anchor point is the mean point of the circle contour
 
 		return cls(c0=c0, c1=c1, c2=c2, c3=c3, anchor=point)
 	

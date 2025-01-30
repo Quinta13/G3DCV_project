@@ -27,10 +27,10 @@ import cv2 as cv
 import numpy as np
 from numpy.typing import NDArray
 
-from src.model.model import LightDirection
+from src.model.geom import LightDirection
 from src.model.thresholding import Thresholding
 from src.model.marker import MarkerDetectionVideoStream, Marker, MarkerDetector
-from src.utils.typing import Frame, Size2D, Views, Pixel, RGBColor, CameraPoseMethod
+from src.model.typing import Frame, Size2D, Views, Pixel, RGBColor, CameraPoseMethod
 from src.utils.stream import Stream, SynchronizedVideoStream
 from src.utils.calibration import CalibratedCamera
 from src.utils.io_ import (
@@ -182,7 +182,7 @@ class MultiLightImageCollection:
     def get_pixel_values(self, pixel: Pixel) -> NDArray:
         ''' Returns a vector of pixel values across all the MLIC frames at the specified pixel coordinates. '''
 
-        px, py = pixel
+        py, px = pixel   # NOTE: images are indexed by rows and columns
         w, h = self.size
 
         if not (0 <= px < w and 0 <= py < h): raise ValueError(f"Pixel coordinates must be within the frame shape {self.size}, got {pixel}. ")

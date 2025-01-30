@@ -8,7 +8,7 @@ import cv2 as cv
 
 from src.utils.calibration import UndistortedVideoStream, CalibratedCamera
 from src.utils.io_ import SilentLogger, BaseLogger
-from src.utils.typing import Frame, Views, Size2D
+from src.model.typing import Frame, Views, Size2D
 
 
 class Thresholding(ABC):

@@ -20,8 +20,8 @@ from matplotlib.axes import Axes
 from numpy.typing import NDArray
 from scipy.interpolate import Rbf
 
-from src.model.model import LightDirection
-from src.utils.typing import Shape, Frame, Pixel
+from src.model.geom import LightDirection
+from src.model.typing import Shape, Frame, Pixel
 from src.model.mlic import MultiLightImageCollection
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer
 
@@ -208,8 +208,12 @@ class Basis:
 		dim_x, dim_y = self.shape
 
 		# Set the axis limits and ticks
-		ax.set_xlim(dim_x-1, 0); ax.set_xticks(np.linspace(0, dim_x-1, TICK_STEP)); ax.set_xticklabels(-np.linspace(min_x, max_x, TICK_STEP))
-		ax.set_ylim(dim_y-1, 0); ax.set_yticks(np.linspace(0, dim_y-1, TICK_STEP)); ax.set_yticklabels(-np.linspace(min_y, max_y, TICK_STEP))
+		ax.set_xlim(0, dim_x-1); 
+		ax.set_xticks(np.linspace(0, dim_x-1, TICK_STEP)); 
+		ax.set_xticklabels(-np.linspace(min_x, max_x, TICK_STEP))
+		ax.set_ylim(0, dim_y-1); 
+		ax.set_yticks(np.linspace(0, dim_y-1, TICK_STEP)); 
+		ax.set_yticklabels(-np.linspace(min_y, max_y, TICK_STEP))
 
 		# Set the colorbar limits
 		if min_max_colorbar: vmin, vmax = self.values_range
@@ -221,7 +225,7 @@ class Basis:
 			values, coords = points
 
 			# Move the coordinates to the pixel space
-			coords_ = np.array([self._map_coordinate((u, v)) for (v, u) in coords])
+			coords_ = np.array([self._map_coordinate((u, v)) for (u, v) in coords])
 
 			if not min_max_colorbar:
 				vmin = min(vmin, values.min())
@@ -242,11 +246,12 @@ class Basis:
 		
 		# Plot the basis as an image
 		img = ax.imshow(
-			self.basis.T,
+			self.basis,
 			cmap='viridis', 
 			vmin=vmin, 
 			vmax=vmax,
 			aspect='auto',  # Allow the image to stretch to fill the axis
+			origin='lower'  # Set the origin to the lower left corner
 		)
 
 		ax.figure.colorbar(img, ax=ax, label='Pixel Luminance')  # type: ignore - figure has attribute colorbar
@@ -308,7 +313,7 @@ class BasisCollection:
 		''' Given a coordinate, stack in a vector all the basis values at that coordinate. '''
 		
 		idx = self.discretize_coordinate(coord=coord)
-		vector = self._basis_collection[:, *idx[::-1]].astype('uint8')
+		vector = self._basis_collection[:, *idx[::-1]].astype('uint8')  # NOTE: Invert the index to match the column-major order
 	
 		return vector
 	
@@ -394,7 +399,7 @@ class MLICPixelsBasisCollection(BasisCollection):
 		''' Reconstruct the frame by reshaping the basis vector for a given light direction. '''
 
 		vector = super().get_vector(coord=tuple(light_direction))
-		frame  = vector.reshape(self.out_shape)
+		frame  = vector.reshape(self.out_shape, order='F')
 
 		return frame
 	

@@ -8,10 +8,10 @@ from typing import Tuple
 import cv2 as cv
 import numpy as np
 
-from src.model.model import LightDirection
+from src.model.geom import LightDirection
 from src.model.interpolation import MLICPixelsBasisCollection
 from src.model.mlic import MultiLightImageCollection
-from src.utils.typing import Size2D, Frame
+from src.model.typing import Size2D, Frame
 from src.utils.io_    import BaseLogger, SilentLogger
 
 class InteractiveReflectanceTransformationImaging:
