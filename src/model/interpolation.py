@@ -21,7 +21,7 @@ from numpy.typing import NDArray
 from scipy.interpolate import Rbf
 
 from src.model.geom import LightDirection
-from src.model.typing import Shape, Frame, Pixel
+from src.model.typing import Shape, Frame, Pixel, Size2D
 from src.model.mlic import MultiLightImageCollection
 from src.utils.io_ import BaseLogger, PathUtils, SilentLogger, InputSanitizationUtils as ISUtils, Timer
 
@@ -230,8 +230,6 @@ class Basis:
 			if not min_max_colorbar:
 				vmin = min(vmin, values.min())
 				vmax = max(vmax, values.max())
-
-			# Invert axis to match matplotlib coordinates
 
 			# Swap the points to match matplotlib coordinates			
 			ax.scatter(
@@ -537,7 +535,7 @@ class MLICBasisInterpolator(BasisInterpolator):
 	def __init__(
 		self,
 		coordinates : NDArray,
-		interpolation_size: Tuple[int, int]
+		interpolation_size: Size2D
 	):
 		super().__init__(
 			coords=coordinates,
@@ -549,7 +547,7 @@ class MLICBasisInterpolator(BasisInterpolator):
 class MLICRadialBasisInterpolator(MLICBasisInterpolator):
 	''' Uses Radial Basis Function interpolation to interpolate the basis. '''
 	
-	def __init__(self, coordinates: NDArray, interpolation_size: Tuple[int, int]):
+	def __init__(self, coordinates: NDArray, interpolation_size: Size2D):
 		super().__init__(coordinates=coordinates, interpolation_size=interpolation_size)
 
 	def _fit_interpolation_function_on_values(self, values: NDArray):
@@ -558,7 +556,7 @@ class MLICRadialBasisInterpolator(MLICBasisInterpolator):
 class RTIPolynomialTextureMapInterpolator(MLICBasisInterpolator):
 	''' Uses Polynomial Texture Maps to interpolate the basis. '''
 
-	def __init__(self, coordinates: NDArray, interpolation_size: Tuple[int, int]):
+	def __init__(self, coordinates: NDArray, interpolation_size: Size2D):
 		super().__init__(coordinates=coordinates, interpolation_size=interpolation_size)
 
 	def _fit_interpolation_function_on_values(self, values: NDArray):
@@ -606,7 +604,7 @@ class MLICBasisCollectionInterpolator:
 		self,
 		mlic: MultiLightImageCollection,
 		C_rti_interpolator: Type[MLICBasisInterpolator],
-		interpolation_size: Tuple[int, int],
+		interpolation_size: Size2D,
 		logger: BaseLogger = SilentLogger()
 	):
 		'''
@@ -620,7 +618,7 @@ class MLICBasisCollectionInterpolator:
 		
 		self._logger             : BaseLogger = logger
 		self._mlic               : MultiLightImageCollection = mlic
-		self._interpolation_size : Tuple[int, int]           = interpolation_size
+		self._interpolation_size : Size2D           = interpolation_size
 		self._rti_interpolator   : MLICBasisInterpolator     = C_rti_interpolator(coordinates=self._mlic.light_directions, interpolation_size=self._interpolation_size)
 	
 	# --- MAGIC METHODS ---
