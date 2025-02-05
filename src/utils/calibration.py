@@ -140,7 +140,7 @@ class CalibratedCamera:
         dist_str = "Distortion Coefficients\n"
         dist_str += " | ".join(f"{val:.6f}" for val in self.distortion_coeffs[0]) + "\n"
 
-        return f"{K_str}\n{dist_str}\n"
+        return f"{K_str}\n{dist_str}"
 
     def __repr__(self) -> str: return str(self)
 

@@ -54,7 +54,9 @@ def main():
     logger.info(msg='PERFORMING CAMERA CALIBRATION')
     camera_calibration = calibrator.calibrate(window_size=CAMERA_2_WINSIZE)
     logger.info(msg='\nCamera calibration results: ')
-    logger.info(msg=f'{camera_calibration}\n')
+    logger.info(msg=f'{camera_calibration}')
+    logger.info(msg=f'Mean Pixel Error: {camera_calibration.info["reprojection_error"]}\n')
+
 
     # Saving results
     logger.info(msg='SAVING CAMERA CALIBRATION')

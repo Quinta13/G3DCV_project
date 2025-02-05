@@ -34,7 +34,7 @@ DETECTOR = MarkerDetector(
     max_contour_area=float(np.prod(VideoFile(path=CAMERA_1_PATH).metadata.size) * 0.5) 
 )
 
-SKIP_FRAMES      = 10
+SKIP_FRAMES      = 5
 SHOW_HISTORY     = True
 CAMERA_1_WINSIZE = (360, 640)
 CAMERA_2_WINSIZE = (640, 360)
